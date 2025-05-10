@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Word Node',
-  description: 'Generate a single word from a prompt using AI and display it in a React Flow node.',
+  title: 'AI Roadmap Generator',
+  description: 'Generate a project roadmap from a prompt using AI and display it as a flow chart.',
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body 
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning={true}
+        suppressHydrationWarning={true} 
       >
         {children}
         <Toaster />

@@ -1,4 +1,4 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/summarize-prompt.ts';
+import '@/ai/flows/generate-roadmap-flow';
