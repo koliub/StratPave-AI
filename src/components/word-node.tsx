@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Edit3, Save } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save } from 'lucide-react';
 
 export type WordNodeData = {
   title: string;
@@ -46,7 +46,6 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   }, [isEditingDescription]);
   
-  // Update local state if data changes from props (e.g., after AI generation)
   useEffect(() => {
     if (!isEditingTitle) {
       setEditedTitle(data.title);
@@ -62,9 +61,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
-      data.onUpdateNodeData(id, { title: editedTitle, description: data.description });
+      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription }); // Use editedDescription here
     } else {
-      // Reset to original if empty
       setEditedTitle(data.title);
     }
     setIsEditingTitle(false);
@@ -72,7 +70,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleDescriptionSave = () => {
     if (data.onUpdateNodeData) {
-      data.onUpdateNodeData(id, { title: data.title, description: editedDescription });
+      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription }); // Use editedTitle here
     }
     setIsEditingDescription(false);
   };
@@ -138,7 +136,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                   onChange={(e) => setEditedTitle(e.target.value)}
                   onBlur={handleTitleSave}
                   onKeyDown={handleTitleKeyDown}
-                  className="text-base font-semibold h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 m-0"
+                  className="text-base font-semibold h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 m-0 bg-transparent"
+                  aria-label="Edit title input"
                 />
               ) : (
                 <CardTitle className={cn(
@@ -146,9 +145,6 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                    data.isDone && "line-through text-muted-foreground"
                 )}>
                   {data.isLoading ? 'Generating...' : data.title || 'Untitled Step'}
-                  {!data.isLoading && !data.isDone && !isEditingTitle && (
-                     <Edit3 className="h-3 w-3 absolute top-0.5 right-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  )}
                 </CardTitle>
               )}
             </div>
@@ -184,8 +180,9 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 onChange={(e) => setEditedDescription(e.target.value)}
                 onBlur={handleDescriptionSave}
                 onKeyDown={handleDescriptionKeyDown}
-                className="text-xs min-h-[60px] focus-visible:ring-1"
+                className="text-xs min-h-[60px] focus-visible:ring-1 bg-transparent"
                 rows={3}
+                aria-label="Edit description textarea"
               />
               <Button variant="ghost" size="icon" onClick={handleDescriptionSave} className="h-6 w-6 text-accent absolute bottom-1 right-1">
                 <Save className="h-4 w-4" />
@@ -193,13 +190,10 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
             </div>
           ) : (
             <CardDescription className={cn(
-              "text-xs break-words cursor-pointer relative min-h-[2em]", // min-h to ensure clickable area
+              "text-xs break-words cursor-pointer relative min-h-[2em]", 
               data.isDone && "text-muted-foreground opacity-80"
             )}>
               {editedDescription || (data.isDone ? "" : "Double-click to add description")}
-              {!data.isLoading && !data.isDone && !isEditingDescription && (
-                <Edit3 className="h-3 w-3 absolute top-0.5 right-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              )}
             </CardDescription>
           )}
         </CardContent>
