@@ -24,6 +24,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ThemeToggle } from '@/components/theme-toggle';
+
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -118,16 +120,17 @@ function FlowCanvas() {
     const newInternalId = `manualnode_${nodeIdCounter}`;
     setNodeIdCounter(prev => prev + 1);
 
-    const currentNode = nodes.find(n => n.id === currentNodeId);
+    const currentNodeIndex = nodes.findIndex(n => n.id === currentNodeId);
+    const currentNode = nodes[currentNodeIndex];
+
     if (!currentNode) {
         toast({ title: "Error", description: "Could not find the current node to add after.", variant: "destructive"});
         return;
     }
     
-    // Position new node slightly below and to the right of the current node
     const newNodePosition = {
         x: currentNode.position.x + 0, 
-        y: currentNode.position.y + (currentNode.height || 150) + 60, // Estimated height + gap
+        y: currentNode.position.y + (currentNode.height || 150) + 60,
     };
 
     const newNode: Node<WordNodeData> = {
@@ -147,47 +150,43 @@ function FlowCanvas() {
         selectable: true,
     };
 
-    setNodes(nds => [...nds, newNode]);
+    const newNodesArray = [...nodes];
+    const newEdgesArray = [...edges];
 
-    const outgoingEdge = edges.find(edge => edge.source === currentNodeId);
+    // Insert new node into the nodes array after the current node
+    newNodesArray.splice(currentNodeIndex + 1, 0, newNode);
 
-    if (outgoingEdge) {
-        const successorId = outgoingEdge.target;
-        setEdges(eds => [
-            ...eds.filter(edge => edge.id !== outgoingEdge.id), 
-            { 
-                id: `e-${currentNodeId}-${newNode.id}`,
-                source: currentNodeId,
-                target: newNode.id,
-                animated: true,
-                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
-            },
-            { 
-                id: `e-${newNode.id}-${successorId}`,
-                source: newNode.id,
-                target: successorId,
-                animated: true,
-                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
-            },
-        ]);
-    } else {
-        setEdges(eds => [
-            ...eds,
-            {
-                id: `e-${currentNodeId}-${newNode.id}`,
-                source: currentNodeId,
-                target: newNode.id,
-                animated: true,
-                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
-            },
-        ]);
+    // Remove the old edge connecting current node to its original successor (if any)
+    const outgoingEdgeIndex = newEdgesArray.findIndex(edge => edge.source === currentNodeId);
+    if (outgoingEdgeIndex !== -1) {
+        const originalSuccessorId = newEdgesArray[outgoingEdgeIndex].target;
+        newEdgesArray.splice(outgoingEdgeIndex, 1); // Remove old edge
+
+        // Add edge from new node to original successor
+        newEdgesArray.push({ 
+            id: `e-${newNode.id}-${originalSuccessorId}`,
+            source: newNode.id,
+            target: originalSuccessorId,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+            style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+        });
     }
 
+    // Add edge from current node to new node
+    newEdgesArray.push({ 
+        id: `e-${currentNodeId}-${newNode.id}`,
+        source: currentNodeId,
+        target: newNode.id,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+        style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+    });
+    
+    setNodes(newNodesArray);
+    setEdges(newEdgesArray);
+
     toast({ title: "New step added!" });
-    // Fit view after a short delay to allow React Flow to process new node/edges
     setTimeout(() => reactFlowInstance.fitView({duration: 300, padding: 0.2}), 100);
 
   }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, setEdges, toast, reactFlowInstance]);
@@ -203,7 +202,6 @@ function FlowCanvas() {
     toast({ title: `${selectedNodeIds.length} step(s) deleted.` });
   }, [isLoading, nodes, setNodes, setEdges, toast]);
 
-  // Keybindings for delete
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isLoading) return;
@@ -211,8 +209,14 @@ function FlowCanvas() {
         const activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
           if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
-            return;
+            // Allow cut (Ctrl+X) in input fields
+            return; 
           }
+        }
+         // Prevent default browser behavior for Ctrl+X if not in input/textarea,
+         // to avoid accidental cut if the shortcut is intended for node deletion.
+        if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
         }
         handleDeleteSelectedNodes();
       }
@@ -357,7 +361,7 @@ function FlowCanvas() {
             placeholder="Enter your project idea (e.g., build an apple tree farm)..."
             value={promptText}
             onChange={(e) => setPromptText(e.target.value)}
-            className="flex-grow"
+            className="flex-grow min-w-0"
             disabled={isLoading}
             onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) handleGenerateRoadmap(); }}
             aria-label="Project idea input field"
@@ -366,6 +370,9 @@ function FlowCanvas() {
             {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
             {isLoading ? 'Generating...' : 'Generate Roadmap'}
           </Button>
+          <div className="sm:ml-auto">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       
