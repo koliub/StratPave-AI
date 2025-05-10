@@ -78,6 +78,32 @@ function FlowCanvas() {
     );
   }, [setNodes]);
 
+  const handleUpdateNodeData = useCallback(
+    (nodeId: string, updatedData: { title: string; description?: string }) => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) => {
+          if (node.id === nodeId) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                title: updatedData.title,
+                description: updatedData.description,
+              },
+            };
+          }
+          return node;
+        })
+      );
+      toast({
+          title: "Node Updated",
+          description: `Step "${updatedData.title}" has been updated.`,
+      });
+    },
+    [setNodes, toast]
+  );
+
+
   const handleGenerateRoadmap = async () => {
     if (!promptText.trim()) {
       toast({
@@ -95,7 +121,12 @@ function FlowCanvas() {
       id: tempLoadingNodeId,
       type: 'wordNode',
       position: { x: 50, y: 50 }, 
-      data: { title: 'Generating Roadmap...', isLoading: true, onToggleDone: handleToggleNodeDone },
+      data: { 
+        title: 'Generating Roadmap...', 
+        isLoading: true, 
+        onToggleDone: handleToggleNodeDone,
+        onUpdateNodeData: handleUpdateNodeData, // Pass callback
+      },
       draggable: true,
       selectable: true,
     };
@@ -131,8 +162,9 @@ function FlowCanvas() {
             title: step.title, 
             description: step.description, 
             isLoading: false, 
-            isDone: false, // Initialize isDone to false
-            onToggleDone: handleToggleNodeDone, // Pass callback
+            isDone: false, 
+            onToggleDone: handleToggleNodeDone, 
+            onUpdateNodeData: handleUpdateNodeData, // Pass callback
           },
           draggable: true,
           selectable: true,
