@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save, XSquare } from 'lucide-react';
 
 export type WordNodeData = {
   title: string;
@@ -18,6 +18,7 @@ export type WordNodeData = {
   isDone?: boolean;
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
+  onDeleteNode?: (id: string) => void; // Added for micro-toolbar
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
@@ -61,7 +62,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
-      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription }); // Use editedDescription here
+      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
     } else {
       setEditedTitle(data.title);
     }
@@ -70,7 +71,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleDescriptionSave = () => {
     if (data.onUpdateNodeData) {
-      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription }); // Use editedTitle here
+      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
     }
     setIsEditingDescription(false);
   };
@@ -93,11 +94,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   };
 
+  const handleDelete = () => {
+    if (data.onDeleteNode && !data.isLoading) {
+      data.onDeleteNode(id);
+    }
+  };
 
   return (
     <Card
       className={cn(
-        "w-64 shadow-xl transition-all duration-300 group",
+        "w-64 shadow-xl transition-all duration-300 group relative", // Added relative positioning
         data.isLoading ? 'opacity-70' : '',
         data.isDone ? 'opacity-60' : 'opacity-100',
         'bg-card text-card-foreground border-border',
@@ -108,6 +114,20 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       aria-checked={data.isDone}
       aria-expanded={hasDescription ? isExpanded : undefined}
     >
+      {selected && !data.isLoading && data.onDeleteNode && (
+        <div className="absolute -top-2 -right-2 z-10">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleDelete}
+            className="h-6 w-6 p-0.5 bg-card hover:bg-destructive hover:text-destructive-foreground rounded-full shadow-md border border-border"
+            aria-label="Delete node"
+            title="Delete node"
+          >
+            <XSquare className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start justify-between">
           <div className="flex items-center flex-grow min-w-0">

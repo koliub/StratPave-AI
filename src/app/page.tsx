@@ -22,8 +22,9 @@ import { WordNode, type WordNodeData } from '@/components/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { MainToolbar } from '@/components/main-toolbar'; // Import MainToolbar
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -59,6 +60,15 @@ function FlowCanvas() {
       return () => clearTimeout(timer);
     }
   }, [nodes, edges, reactFlowInstance]);
+
+  const handleDeleteNode = useCallback((nodeIdToDelete: string) => {
+    if (isLoading) return;
+    const nodeToDelete = nodes.find(n => n.id === nodeIdToDelete);
+    setNodes(nds => nds.filter(node => node.id !== nodeIdToDelete));
+    setEdges(eds => eds.filter(edge => edge.source !== nodeIdToDelete && edge.target !== nodeIdToDelete));
+    toast({ title: `Step "${nodeToDelete?.data?.title || 'Unknown'}" deleted.` });
+  }, [nodes, setNodes, setEdges, toast, isLoading]);
+  
 
   const handleToggleNodeDone = useCallback((nodeId: string) => {
     setNodes((prevNodes) =>
@@ -96,12 +106,59 @@ function FlowCanvas() {
         })
       );
       toast({
-          title: "Node Updated",
+          title: "Step Updated",
           description: `Step "${updatedData.title}" has been updated.`,
       });
     },
     [setNodes, toast]
   );
+
+  const handleAddNode = useCallback(() => {
+    if (isLoading) return;
+    const newId = `manualnode_${nodeIdCounter}`;
+    setNodeIdCounter(prev => prev + 1);
+    const newNode: Node<WordNodeData> = {
+      id: newId,
+      type: 'wordNode',
+      position: { x: 50 + (nodes.length % 5) * 100 , y: 50 + Math.floor(nodes.length / 5) * 50 }, // Basic positioning
+      data: {
+        title: 'New Step',
+        description: 'Double-click description to edit.',
+        isDone: false,
+        onToggleDone: handleToggleNodeDone,
+        onUpdateNodeData: handleUpdateNodeData,
+        onDeleteNode: handleDeleteNode, 
+      },
+      draggable: true,
+      selectable: true,
+    };
+    setNodes(nds => [...nds, newNode]);
+    toast({ title: "New step added!" });
+  }, [isLoading, nodeIdCounter, nodes.length, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, toast]);
+
+  const handleDeleteSelectedNodes = useCallback(() => {
+    if (isLoading) return;
+    const selectedNodeIds = nodes.filter(n => n.selected).map(n => n.id);
+    if (selectedNodeIds.length === 0) return;
+
+    setNodes(nds => nds.filter(node => !node.selected));
+    setEdges(eds => eds.filter(edge => !selectedNodeIds.includes(edge.source) && !selectedNodeIds.includes(edge.target)));
+    toast({ title: `${selectedNodeIds.length} step(s) deleted.` });
+  }, [isLoading, nodes, setNodes, setEdges, toast]);
+
+  // Keybindings for delete
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isLoading) return;
+      if (event.key === 'Delete' || (event.key === 'x' && (event.ctrlKey || event.metaKey))) {
+        handleDeleteSelectedNodes();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleDeleteSelectedNodes, isLoading]);
 
 
   const handleGenerateRoadmap = async () => {
@@ -125,13 +182,14 @@ function FlowCanvas() {
         title: 'Generating Roadmap...', 
         isLoading: true, 
         onToggleDone: handleToggleNodeDone,
-        onUpdateNodeData: handleUpdateNodeData, // Pass callback
+        onUpdateNodeData: handleUpdateNodeData,
+        onDeleteNode: handleDeleteNode,
       },
       draggable: true,
       selectable: true,
     };
     setNodes([tempLoadingNode]);
-    setEdges([]); // Clear previous edges
+    setEdges([]); 
     setNodeIdCounter(prev => prev + 1);
 
 
@@ -164,7 +222,8 @@ function FlowCanvas() {
             isLoading: false, 
             isDone: false, 
             onToggleDone: handleToggleNodeDone, 
-            onUpdateNodeData: handleUpdateNodeData, // Pass callback
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode, 
           },
           draggable: true,
           selectable: true,
@@ -244,6 +303,7 @@ function FlowCanvas() {
           </Button>
         </div>
       </header>
+      <MainToolbar onAddNode={handleAddNode} isLoading={isLoading} />
       <main className="flex-grow relative" aria-label="React Flow canvas area">
         <ReactFlow
           nodes={nodes}
@@ -254,6 +314,8 @@ function FlowCanvas() {
           fitViewOptions={{ padding: 0.2, duration: 300 }}
           className="bg-background"
           proOptions={{ hideAttribution: true }}
+          multiSelectionKey="ctrl" // Already default on win/linux, good to be explicit
+          deleteKeyCode={null} // Disable default delete key handling, we use our own
         >
           <Controls 
             className="[&_button]:bg-card [&_button]:border-border [&_button:hover]:bg-muted [&_button_svg]:fill-foreground" 
@@ -286,4 +348,3 @@ export default function RoadmapPage() {
     </ReactFlowProvider>
   );
 }
-
