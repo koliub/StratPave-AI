@@ -82,19 +82,43 @@ function FlowCanvas() {
   }, [nodes, setNodes, setEdges, toast, isLoading]);
   
 
+  const handleManualToggleExpansion = useCallback((nodeId: string) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId && node.data._isExpandedOverride !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { _isExpandedOverride, ...restData } = node.data;
+          return {
+            ...node,
+            data: { ...restData }, // Clear the override
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
   const handleToggleNodeDone = useCallback((nodeId: string) => {
     setNodes((prevNodes) =>
       prevNodes.map((node) => {
         if (node.id === nodeId) {
           const currentIsDone = node.data?.isDone ?? false;
           const newIsDone = !currentIsDone;
+          
+          let newOverrideState: boolean | undefined = undefined; 
+
+          if (newIsDone && node.data.description) {
+            newOverrideState = false; // Auto-collapse if marked done and has description
+          }
+          // If unmarking as done (newIsDone is false), newOverrideState remains undefined,
+          // effectively clearing any previous override, letting the node use its internal state.
+
           return {
             ...node,
             data: {
               ...node.data,
               isDone: newIsDone,
-              // Auto-collapse if description exists and node is marked done
-              ...(node.data.description && newIsDone ? { _isExpandedOverride: false } : {}),
+              _isExpandedOverride: newOverrideState,
             },
           };
         }
@@ -158,7 +182,8 @@ function FlowCanvas() {
             onToggleDone: handleToggleNodeDone,
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
-            onAddNodeAfter: handleAddNodeAfter, 
+            onAddNodeAfter: handleAddNodeAfter,
+            onManualToggleExpansion: handleManualToggleExpansion, 
         },
         draggable: true,
         selectable: true,
@@ -199,7 +224,7 @@ function FlowCanvas() {
     toast({ title: "New step added!" });
     setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
 
-  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, setEdges, toast, reactFlowInstance]);
+  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleManualToggleExpansion, setNodes, setEdges, toast, reactFlowInstance]);
 
 
   const handleDeleteSelectedNodes = useCallback(() => {
@@ -260,6 +285,7 @@ function FlowCanvas() {
         onUpdateNodeData: handleUpdateNodeData,
         onDeleteNode: handleDeleteNode,
         onAddNodeAfter: handleAddNodeAfter,
+        onManualToggleExpansion: handleManualToggleExpansion,
       },
       draggable: true,
       selectable: true,
@@ -301,6 +327,7 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode, 
             onAddNodeAfter: handleAddNodeAfter,
+            onManualToggleExpansion: handleManualToggleExpansion,
           },
           draggable: true,
           selectable: true,
@@ -370,10 +397,6 @@ function FlowCanvas() {
     );
     reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
     
-    // Clear the sidebar selection visual cue after a short delay
-    // to allow React Flow to handle its own selection state primarily.
-    // Or, keep it if you want a persistent highlight in the sidebar.
-    // For now, let's keep it.
   };
 
   return (

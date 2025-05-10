@@ -22,10 +22,10 @@ export type WordNodeData = {
   onDeleteNode?: (id: string) => void;
   onAddNodeAfter?: (id: string) => void; 
   _isExpandedOverride?: boolean; // Controlled from parent
+  onManualToggleExpansion?: (id: string) => void; // Callback for manual toggle
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
-  // Internal expansion state, primarily for user interaction if not overridden
   const [isInternallyExpanded, setIsInternallyExpanded] = useState(true); 
   
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -38,22 +38,13 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const hasDescription = !!data.description && !data.isLoading;
 
-  // Determine actual expansion state: prioritize override, then internal state
   const isExpanded = data._isExpandedOverride !== undefined ? data._isExpandedOverride : isInternallyExpanded;
 
   const toggleExpansion = () => {
-    if (data._isExpandedOverride !== undefined) {
-      // If controlled, parent needs to update `_isExpandedOverride`
-      // This might require an additional callback if direct toggle from node is needed
-      // For now, let's assume parent controls it if _isExpandedOverride is set.
-      // A simple way is to just use the internal state if no override.
-      // Or, this button could call a new prop like `onToggleExpansion(id)`.
-      // For now, we'll just toggle internal state if not overridden.
-      setIsInternallyExpanded(!isExpanded);
-
-    } else {
-      setIsInternallyExpanded(!isExpanded);
+    if (data.onManualToggleExpansion) {
+        data.onManualToggleExpansion(id); // Notify parent to clear override
     }
+    setIsInternallyExpanded(prevExpanded => !prevExpanded); // Toggle internal state
   };
 
 
@@ -82,15 +73,6 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       setEditedDescription(data.description || '');
     }
   }, [data.description, isEditingDescription]);
-
-  // Effect to set internal expansion based on done state, if not overridden
-  useEffect(() => {
-    if (data._isExpandedOverride === undefined && data.isDone && hasDescription) {
-      setIsInternallyExpanded(false);
-    } else if (data._isExpandedOverride === undefined && !data.isDone && hasDescription) {
-       setIsInternallyExpanded(true); // Re-expand if marked not done
-    }
-  }, [data.isDone, hasDescription, data._isExpandedOverride]);
 
 
   const handleTitleSave = () => {
@@ -146,8 +128,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
         data.isLoading ? 'opacity-70' : '',
         data.isDone ? 'opacity-60' : 'opacity-100',
         'bg-card text-card-foreground border-border',
-        selected && !data.isLoading && 'ring-2 ring-ring ring-offset-background', // Default selection ring
-        selected && !data.isLoading && data.isDone && 'ring-success', // Green ring if selected and done
+        selected && !data.isLoading && 'ring-2 ring-ring ring-offset-background', 
+        selected && !data.isLoading && data.isDone && 'ring-success', 
       )}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
