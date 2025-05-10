@@ -20,11 +20,14 @@ export type WordNodeData = {
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
-  onAddNodeAfter?: (id: string) => void; // New callback for adding a node after
+  onAddNodeAfter?: (id: string) => void; 
+  _isExpandedOverride?: boolean; // Controlled from parent
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Internal expansion state, primarily for user interaction if not overridden
+  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true); 
+  
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(data.title);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -34,6 +37,25 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const hasDescription = !!data.description && !data.isLoading;
+
+  // Determine actual expansion state: prioritize override, then internal state
+  const isExpanded = data._isExpandedOverride !== undefined ? data._isExpandedOverride : isInternallyExpanded;
+
+  const toggleExpansion = () => {
+    if (data._isExpandedOverride !== undefined) {
+      // If controlled, parent needs to update `_isExpandedOverride`
+      // This might require an additional callback if direct toggle from node is needed
+      // For now, let's assume parent controls it if _isExpandedOverride is set.
+      // A simple way is to just use the internal state if no override.
+      // Or, this button could call a new prop like `onToggleExpansion(id)`.
+      // For now, we'll just toggle internal state if not overridden.
+      setIsInternallyExpanded(!isExpanded);
+
+    } else {
+      setIsInternallyExpanded(!isExpanded);
+    }
+  };
+
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -61,18 +83,21 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   }, [data.description, isEditingDescription]);
 
+  // Effect to set internal expansion based on done state, if not overridden
   useEffect(() => {
-    if (data.isDone && hasDescription) {
-      setIsExpanded(false);
+    if (data._isExpandedOverride === undefined && data.isDone && hasDescription) {
+      setIsInternallyExpanded(false);
+    } else if (data._isExpandedOverride === undefined && !data.isDone && hasDescription) {
+       setIsInternallyExpanded(true); // Re-expand if marked not done
     }
-  }, [data.isDone, hasDescription]);
+  }, [data.isDone, hasDescription, data._isExpandedOverride]);
 
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
       data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
     } else {
-      setEditedTitle(data.title); // Revert to original if save is attempted with empty title
+      setEditedTitle(data.title); 
     }
     setIsEditingTitle(false);
   };
@@ -121,8 +146,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
         data.isLoading ? 'opacity-70' : '',
         data.isDone ? 'opacity-60' : 'opacity-100',
         'bg-card text-card-foreground border-border',
-        selected && !data.isDone && 'ring-2 ring-ring ring-offset-2 ring-offset-background',
-        selected && data.isDone && 'ring-2 ring-[hsl(var(--success))] ring-offset-2 ring-offset-background'
+        selected && !data.isLoading && 'ring-2 ring-ring ring-offset-background', // Default selection ring
+        selected && !data.isLoading && data.isDone && 'ring-success', // Green ring if selected and done
       )}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
@@ -169,7 +194,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 title={data.isDone ? 'Mark as not done' : 'Mark as done'}
               >
                 {data.isDone ? (
-                  <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))]" />
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                 ) : (
                   <Circle className="h-5 w-5 text-muted-foreground" />
                 )}
@@ -203,7 +228,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={toggleExpansion}
                 className="h-6 w-6"
                 aria-label={isExpanded ? 'Collapse description' : 'Expand description'}
               >
@@ -253,4 +278,3 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     </Card>
   );
 }
-

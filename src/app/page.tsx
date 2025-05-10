@@ -22,9 +22,19 @@ import { WordNode, type WordNodeData } from '@/components/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ListTree } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarTrigger,
+  SidebarInset,
+} from '@/components/ui/sidebar';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 
 const nodeTypes = {
@@ -40,6 +50,7 @@ function FlowCanvas() {
   const [promptText, setPromptText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
+  const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
 
@@ -54,13 +65,13 @@ function FlowCanvas() {
   );
   
   useEffect(() => {
-    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0)) {
+    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0) && !selectedNodeIdFromSidebar) {
       const timer = setTimeout(() => {
         reactFlowInstance.fitView({ duration: 300, padding: 0.2 });
       }, 150); 
       return () => clearTimeout(timer);
     }
-  }, [nodes, edges, reactFlowInstance]);
+  }, [nodes, edges, reactFlowInstance, selectedNodeIdFromSidebar]);
 
   const handleDeleteNode = useCallback((nodeIdToDelete: string) => {
     if (isLoading) return;
@@ -76,11 +87,14 @@ function FlowCanvas() {
       prevNodes.map((node) => {
         if (node.id === nodeId) {
           const currentIsDone = node.data?.isDone ?? false;
+          const newIsDone = !currentIsDone;
           return {
             ...node,
             data: {
               ...node.data,
-              isDone: !currentIsDone,
+              isDone: newIsDone,
+              // Auto-collapse if description exists and node is marked done
+              ...(node.data.description && newIsDone ? { _isExpandedOverride: false } : {}),
             },
           };
         }
@@ -153,16 +167,13 @@ function FlowCanvas() {
     const newNodesArray = [...nodes];
     const newEdgesArray = [...edges];
 
-    // Insert new node into the nodes array after the current node
     newNodesArray.splice(currentNodeIndex + 1, 0, newNode);
 
-    // Remove the old edge connecting current node to its original successor (if any)
     const outgoingEdgeIndex = newEdgesArray.findIndex(edge => edge.source === currentNodeId);
     if (outgoingEdgeIndex !== -1) {
         const originalSuccessorId = newEdgesArray[outgoingEdgeIndex].target;
-        newEdgesArray.splice(outgoingEdgeIndex, 1); // Remove old edge
+        newEdgesArray.splice(outgoingEdgeIndex, 1); 
 
-        // Add edge from new node to original successor
         newEdgesArray.push({ 
             id: `e-${newNode.id}-${originalSuccessorId}`,
             source: newNode.id,
@@ -173,7 +184,6 @@ function FlowCanvas() {
         });
     }
 
-    // Add edge from current node to new node
     newEdgesArray.push({ 
         id: `e-${currentNodeId}-${newNode.id}`,
         source: currentNodeId,
@@ -187,7 +197,7 @@ function FlowCanvas() {
     setEdges(newEdgesArray);
 
     toast({ title: "New step added!" });
-    setTimeout(() => reactFlowInstance.fitView({duration: 300, padding: 0.2}), 100);
+    setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
 
   }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, setEdges, toast, reactFlowInstance]);
 
@@ -209,12 +219,9 @@ function FlowCanvas() {
         const activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
           if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
-            // Allow cut (Ctrl+X) in input fields
             return; 
           }
         }
-         // Prevent default browser behavior for Ctrl+X if not in input/textarea,
-         // to avoid accidental cut if the shortcut is intended for node deletion.
         if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
             event.preventDefault();
         }
@@ -239,6 +246,7 @@ function FlowCanvas() {
     }
 
     setIsLoading(true);
+    setSelectedNodeIdFromSidebar(null); 
     
     const tempLoadingNodeId = `loading_node_${nodeIdCounter}`;
     const tempLoadingNode: Node<WordNodeData> = {
@@ -352,63 +360,128 @@ function FlowCanvas() {
     }
   };
 
+  const handleNodeSelectFromSidebar = (nodeId: string) => {
+    setSelectedNodeIdFromSidebar(nodeId);
+    setNodes(nds => 
+      nds.map(n => ({
+        ...n,
+        selected: n.id === nodeId,
+      }))
+    );
+    reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
+    
+    // Clear the sidebar selection visual cue after a short delay
+    // to allow React Flow to handle its own selection state primarily.
+    // Or, keep it if you want a persistent highlight in the sidebar.
+    // For now, let's keep it.
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground" aria-label="Roadmap Generation application main screen">
-      <header className="p-4 border-b border-border shadow-sm bg-card">
-        <div className="container mx-auto flex flex-col sm:flex-row items-center gap-4">
-          <Input
-            type="text"
-            placeholder="Enter your project idea (e.g., build an apple tree farm)..."
-            value={promptText}
-            onChange={(e) => setPromptText(e.target.value)}
-            className="flex-grow min-w-0"
-            disabled={isLoading}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) handleGenerateRoadmap(); }}
-            aria-label="Project idea input field"
-          />
-          <Button onClick={handleGenerateRoadmap} disabled={isLoading} className="w-full sm:w-auto shrink-0 px-6">
-            {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
-            {isLoading ? 'Generating...' : 'Generate Roadmap'}
-          </Button>
-          <div className="sm:ml-auto">
-            <ThemeToggle />
+    <SidebarProvider>
+      <Sidebar collapsible="icon" side="left">
+        <SidebarHeader className="p-2">
+          <div className="flex items-center justify-between">
+             <h2 className="text-lg font-semibold pl-2 group-data-[collapsible=icon]:hidden">Roadmap Steps</h2>
+             <ListTree className="h-5 w-5 group-data-[collapsible=icon]:mx-auto" />
           </div>
-        </div>
-      </header>
-      
-      <main className="flex-grow relative" aria-label="React Flow canvas area">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
-          fitViewOptions={{ padding: 0.2, duration: 300 }}
-          className="bg-background"
-          proOptions={{ hideAttribution: true }}
-          deleteKeyCode={null} 
-        >
-          <Controls 
-            className="[&_button]:bg-card [&_button]:border-border [&_button:hover]:bg-muted [&_button_svg]:fill-foreground" 
-            position="bottom-right"
-          />
-          <MiniMap 
-            nodeStrokeWidth={3} 
-            nodeColor={(node) => {
-              if (node.type === 'wordNode' && node.data.isLoading) return 'hsl(var(--muted-foreground))';
-              if (node.type === 'wordNode' && node.data.isDone) return 'hsl(var(--success))';
-              if (node.type === 'wordNode') return 'hsl(var(--accent))';
-              return 'hsl(var(--muted-foreground))'; 
-            }} 
-            pannable 
-            zoomable 
-            className="!bg-card border border-border rounded-md shadow-lg"
-            ariaLabel="Minimap for canvas navigation"
-          />
-          <Background variant="dots" gap={16} size={1} color="hsl(var(--border))" />
-        </ReactFlow>
-      </main>
-    </div>
+        </SidebarHeader>
+        <SidebarContent>
+          {nodes.length === 0 && !isLoading && (
+            <p className="p-4 text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
+              Generate a roadmap to see steps here.
+            </p>
+          )}
+          {isLoading && nodes.some(n => n.data.isLoading) && (
+             <p className="p-4 text-sm text-muted-foreground group-data-[collapsible=icon]:hidden">
+              Generating...
+            </p>
+          )}
+          <ScrollArea className="h-full">
+            <ul className="p-2 space-y-1 group-data-[collapsible=icon]:space-y-2">
+              {nodes.filter(n => !n.data.isLoading).map((node) => (
+                <li key={node.id}>
+                  <Button
+                    variant={selectedNodeIdFromSidebar === node.id ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-start text-left h-auto py-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8",
+                      node.data.isDone && "line-through opacity-70"
+                    )}
+                    onClick={() => handleNodeSelectFromSidebar(node.id)}
+                    title={node.data.title}
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden truncate">
+                      {node.data.title}
+                    </span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">
+                      {node.data.title.substring(0,1).toUpperCase()}
+                    </span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </SidebarContent>
+      </Sidebar>
+
+      <SidebarInset className="flex flex-col h-screen">
+        <header className="p-4 border-b border-border shadow-sm bg-card">
+          <div className="container mx-auto flex flex-col sm:flex-row items-center gap-4">
+            <SidebarTrigger className="sm:hidden" /> {/* Mobile only trigger */}
+            <Input
+              type="text"
+              placeholder="Enter your project idea (e.g., build an apple tree farm)..."
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              className="flex-grow min-w-0"
+              disabled={isLoading}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) handleGenerateRoadmap(); }}
+              aria-label="Project idea input field"
+            />
+            <Button onClick={handleGenerateRoadmap} disabled={isLoading} className="w-full sm:w-auto shrink-0 px-6">
+              {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
+              {isLoading ? 'Generating...' : 'Generate Roadmap'}
+            </Button>
+            <div className="sm:ml-auto flex items-center gap-2">
+              <ThemeToggle />
+              <SidebarTrigger className="hidden sm:flex" /> {/* Desktop trigger */}
+            </div>
+          </div>
+        </header>
+        
+        <main className="flex-grow relative" aria-label="React Flow canvas area">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            fitViewOptions={{ padding: 0.2, duration: 300 }}
+            className="bg-background"
+            proOptions={{ hideAttribution: true }}
+            deleteKeyCode={null} 
+          >
+            <Controls 
+              className="[&_button]:bg-card [&_button]:border-border [&_button:hover]:bg-muted [&_button_svg]:fill-foreground" 
+              position="bottom-right"
+            />
+            <MiniMap 
+              nodeStrokeWidth={3} 
+              nodeColor={(node) => {
+                if (node.type === 'wordNode' && node.data.isLoading) return 'hsl(var(--muted-foreground))';
+                if (node.type === 'wordNode' && node.data.isDone) return 'hsl(var(--success))';
+                if (node.type === 'wordNode') return 'hsl(var(--accent))';
+                return 'hsl(var(--muted-foreground))'; 
+              }} 
+              pannable 
+              zoomable 
+              className="!bg-card border border-border rounded-md shadow-lg"
+              ariaLabel="Minimap for canvas navigation"
+            />
+            <Background variant="dots" gap={16} size={1} color="hsl(var(--border))" />
+          </ReactFlow>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
@@ -419,4 +492,3 @@ export default function RoadmapPage() {
     </ReactFlowProvider>
   );
 }
-
