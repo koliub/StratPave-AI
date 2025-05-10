@@ -20,14 +20,14 @@ export type WordNodeData = {
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
-  onAddNodeAfter?: (id: string) => void; 
+  onAddNodeAfter?: (id: string) => void;
   _isExpandedOverride?: boolean; // Controlled from parent
   onManualToggleExpansion?: (id: string) => void; // Callback for manual toggle
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
-  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true); 
-  
+  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true);
+
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(data.title);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -41,10 +41,13 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
   const isExpanded = data._isExpandedOverride !== undefined ? data._isExpandedOverride : isInternallyExpanded;
 
   const toggleExpansion = () => {
+    const wasAutoCollapsed = data._isExpandedOverride === false;
     if (data.onManualToggleExpansion) {
         data.onManualToggleExpansion(id); // Notify parent to clear override
     }
-    setIsInternallyExpanded(prevExpanded => !prevExpanded); // Toggle internal state
+    // If it was auto-collapsed (because it was 'done'), the intent of clicking is to expand it.
+    // Otherwise, just toggle the current internal state.
+    setIsInternallyExpanded(prevExpanded => wasAutoCollapsed ? true : !prevExpanded);
   };
 
 
@@ -61,7 +64,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       descriptionTextareaRef.current.select();
     }
   }, [isEditingDescription]);
-  
+
   useEffect(() => {
     if (!isEditingTitle) {
       setEditedTitle(data.title);
@@ -79,7 +82,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
       data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
     } else {
-      setEditedTitle(data.title); 
+      setEditedTitle(data.title);
     }
     setIsEditingTitle(false);
   };
@@ -125,11 +128,12 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     <Card
       className={cn(
         "w-64 shadow-xl transition-all duration-300 group relative",
-        data.isLoading ? 'opacity-70' : '',
-        data.isDone ? 'opacity-60' : 'opacity-100',
-        'bg-card text-card-foreground border-border',
-        selected && !data.isLoading && 'ring-2 ring-ring ring-offset-background', 
-        selected && !data.isLoading && data.isDone && 'ring-success', 
+        'bg-card text-card-foreground', // Base styles
+        data.isLoading && 'opacity-70', // Opacity for loading (will use default border)
+        data.isDone && !data.isLoading && 'opacity-70 border-2 border-[hsl(var(--success))]', // If done (and not loading): opacity + green border
+        !data.isDone && !data.isLoading && 'border-border', // Default border if not done and not loading
+        selected && !data.isLoading && !data.isDone && 'ring-2 ring-ring ring-offset-background',
+        selected && !data.isLoading && data.isDone && 'ring-2 ring-[hsl(var(--success))] ring-offset-background',
       )}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
@@ -213,6 +217,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 onClick={toggleExpansion}
                 className="h-6 w-6"
                 aria-label={isExpanded ? 'Collapse description' : 'Expand description'}
+                title={isExpanded ? 'Collapse description' : 'Expand description'}
               >
                 {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
@@ -245,10 +250,10 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
             </div>
           ) : (
             <CardDescription className={cn(
-              "text-xs break-words cursor-pointer relative min-h-[2em]", 
+              "text-xs break-words cursor-pointer relative min-h-[2em]",
               data.isDone && "text-muted-foreground opacity-80"
             )}>
-              {editedDescription || (data.isDone ? "" : "Double-click to add description")}
+              {editedDescription || (data.isDone && !data.description ? "" : "Double-click to add description")}
             </CardDescription>
           )}
         </CardContent>
