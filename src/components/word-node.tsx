@@ -21,12 +21,12 @@ export type WordNodeData = {
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
   onAddNodeAfter?: (id: string) => void;
-  _isExpandedOverride?: boolean; // Controlled from parent
-  onManualToggleExpansion?: (id: string) => void; // Callback for manual toggle
+  _isExpandedOverride?: boolean; // Controlled from parent for global actions
+  onManualToggleExpansion?: (id: string) => void; // Callback for manual toggle by user
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
-  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true);
+  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true); // Node's own preference
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(data.title);
@@ -38,16 +38,19 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const hasDescription = !!data.description && !data.isLoading;
 
-  const isExpanded = data._isExpandedOverride !== undefined ? data._isExpandedOverride : isInternallyExpanded;
+  // Effective expansion state: global override takes precedence, then internal state.
+  const isEffectivelyExpanded = data._isExpandedOverride !== undefined 
+    ? data._isExpandedOverride 
+    : isInternallyExpanded;
 
   const toggleExpansion = () => {
-    const wasAutoCollapsed = data._isExpandedOverride === false;
+    // Signal parent that a manual toggle occurred for this node.
+    // Parent might then clear global overrides and allow this node's internal state to take effect.
     if (data.onManualToggleExpansion) {
-        data.onManualToggleExpansion(id); // Notify parent to clear override
+      data.onManualToggleExpansion(id);
     }
-    // If it was auto-collapsed (because it was 'done'), the intent of clicking is to expand it.
-    // Otherwise, just toggle the current internal state.
-    setIsInternallyExpanded(prevExpanded => wasAutoCollapsed ? true : !prevExpanded);
+    // Always toggle the internal preference. It will be used if _isExpandedOverride becomes undefined.
+    setIsInternallyExpanded(prevExpanded => !prevExpanded);
   };
 
 
@@ -128,16 +131,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     <Card
       className={cn(
         "w-64 shadow-xl transition-all duration-300 group relative",
-        'bg-card text-card-foreground', // Base styles
-        data.isLoading && 'opacity-70', // Opacity for loading (will use default border)
-        data.isDone && !data.isLoading && 'opacity-70 border-2 border-[hsl(var(--success))]', // If done (and not loading): opacity + green border
-        !data.isDone && !data.isLoading && 'border-border', // Default border if not done and not loading
+        'bg-card text-card-foreground', 
+        data.isLoading && 'opacity-70', 
+        data.isDone && !data.isLoading && 'opacity-70 border-2 border-[hsl(var(--success))]', 
+        !data.isDone && !data.isLoading && 'border-border', 
         selected && !data.isLoading && !data.isDone && 'ring-2 ring-ring ring-offset-background',
         selected && !data.isLoading && data.isDone && 'ring-2 ring-[hsl(var(--success))] ring-offset-background',
       )}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
-      aria-expanded={hasDescription ? isExpanded : undefined}
+      aria-expanded={hasDescription ? isEffectivelyExpanded : undefined}
     >
       {selected && !data.isLoading && (data.onDeleteNode || data.onAddNodeAfter) && (
         <div className="absolute -top-2 -right-10 z-10 flex flex-col space-y-1">
@@ -216,10 +219,10 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 size="icon"
                 onClick={toggleExpansion}
                 className="h-6 w-6"
-                aria-label={isExpanded ? 'Collapse description' : 'Expand description'}
-                title={isExpanded ? 'Collapse description' : 'Expand description'}
+                aria-label={isEffectivelyExpanded ? 'Collapse description' : 'Expand description'}
+                title={isEffectivelyExpanded ? 'Collapse description' : 'Expand description'}
               >
-                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                {isEffectivelyExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
             )}
              {isEditingTitle && (
@@ -230,7 +233,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
           </div>
         </div>
       </CardHeader>
-      {hasDescription && isExpanded && (
+      {hasDescription && isEffectivelyExpanded && (
         <CardContent className="p-3 pt-0" onDoubleClick={() => !data.isLoading && !data.isDone && setIsEditingDescription(true)}>
           {isEditingDescription && !data.isLoading ? (
             <div className="relative">
@@ -265,3 +268,4 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     </Card>
   );
 }
+

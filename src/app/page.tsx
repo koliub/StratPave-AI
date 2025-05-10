@@ -22,7 +22,7 @@ import { WordNode, type WordNodeData } from '@/components/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, ListTree } from 'lucide-react';
+import { Loader2, ListTree, Maximize, Minimize } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
@@ -51,6 +51,8 @@ function FlowCanvas() {
   const [isLoading, setIsLoading] = useState(false);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
+  const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
+
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
 
@@ -83,16 +85,19 @@ function FlowCanvas() {
   
 
   const handleManualToggleExpansion = useCallback((nodeId: string) => {
+    setGlobalExpansionOverride(null); // Revert to individual control mode
     setNodes((nds) =>
       nds.map((node) => {
-        if (node.id === nodeId && node.data._isExpandedOverride !== undefined) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { _isExpandedOverride, ...restData } = node.data;
+        if (node.id === nodeId) {
+          // For the clicked node, clear its _isExpandedOverride.
+          // The WordNode will toggle its internal state and use that.
           return {
             ...node,
-            data: { ...restData }, // Clear the override
+            data: { ...node.data, _isExpandedOverride: undefined },
           };
         }
+        // Other nodes retain their current _isExpandedOverride state from the last global command,
+        // or undefined if they were already individually controlled or global was null.
         return node;
       })
     );
@@ -106,26 +111,35 @@ function FlowCanvas() {
           const newIsDone = !currentIsDone;
           
           let newOverrideState: boolean | undefined = undefined; 
+          // If global override is active, individual done actions shouldn't change expansion immediately
+          // UNLESS we specifically want 'done' to always collapse.
+          // Current behavior: if done, it tries to set _isExpandedOverride = false.
+          // This will be overridden by globalExpansionOverride if it's not null when nodes are re-rendered.
 
-          if (newIsDone && node.data.description) {
-            newOverrideState = false; // Auto-collapse if marked done and has description
+          if (globalExpansionOverride === null) { // Only apply auto-collapse if not under global control
+            if (newIsDone && node.data.description) {
+              newOverrideState = false; 
+            }
+          } else {
+            // If under global control, retain that override unless explicitly changed by global buttons
+             newOverrideState = node.data._isExpandedOverride;
           }
-          // If unmarking as done (newIsDone is false), newOverrideState remains undefined,
-          // effectively clearing any previous override, letting the node use its internal state.
+
 
           return {
             ...node,
             data: {
               ...node.data,
               isDone: newIsDone,
-              _isExpandedOverride: newOverrideState,
+              // Only set _isExpandedOverride if globalExpansionOverride is null
+              _isExpandedOverride: globalExpansionOverride === null ? newOverrideState : globalExpansionOverride,
             },
           };
         }
         return node;
       })
     );
-  }, [setNodes]);
+  }, [setNodes, globalExpansionOverride]);
 
   const handleUpdateNodeData = useCallback(
     (nodeId: string, updatedData: { title: string; description?: string }) => {
@@ -183,7 +197,8 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
             onAddNodeAfter: handleAddNodeAfter,
-            onManualToggleExpansion: handleManualToggleExpansion, 
+            onManualToggleExpansion: handleManualToggleExpansion,
+            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : undefined,
         },
         draggable: true,
         selectable: true,
@@ -224,7 +239,7 @@ function FlowCanvas() {
     toast({ title: "New step added!" });
     setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
 
-  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleManualToggleExpansion, setNodes, setEdges, toast, reactFlowInstance]);
+  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleManualToggleExpansion, globalExpansionOverride, setNodes, setEdges, toast, reactFlowInstance]);
 
 
   const handleDeleteSelectedNodes = useCallback(() => {
@@ -272,6 +287,7 @@ function FlowCanvas() {
 
     setIsLoading(true);
     setSelectedNodeIdFromSidebar(null); 
+    setGlobalExpansionOverride(null); // Reset global expansion on new roadmap
     
     const tempLoadingNodeId = `loading_node_${nodeIdCounter}`;
     const tempLoadingNode: Node<WordNodeData> = {
@@ -328,6 +344,7 @@ function FlowCanvas() {
             onDeleteNode: handleDeleteNode, 
             onAddNodeAfter: handleAddNodeAfter,
             onManualToggleExpansion: handleManualToggleExpansion,
+            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : undefined,
           },
           draggable: true,
           selectable: true,
@@ -396,8 +413,30 @@ function FlowCanvas() {
       }))
     );
     reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
-    
   };
+
+  const handleExpandAllNodes = () => {
+    if (isLoading || nodes.length === 0) return;
+    setGlobalExpansionOverride(true);
+    setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, _isExpandedOverride: true } })));
+  };
+
+  const handleCollapseAllNodes = () => {
+    if (isLoading || nodes.length === 0) return;
+    setGlobalExpansionOverride(false);
+    setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, _isExpandedOverride: false } })));
+  };
+
+
+  // Re-apply globalExpansionOverride when nodes array changes (e.g. new nodes added)
+  useEffect(() => {
+    if (globalExpansionOverride !== null) {
+      setNodes(nds => nds.map(n => {
+        if (n.data.isLoading) return n; // Don't override loading node expansion
+        return { ...n, data: { ...n.data, _isExpandedOverride: globalExpansionOverride } };
+      }));
+    }
+  }, [globalExpansionOverride, nodes.length]); // Rerun if global override changes or node count changes
 
   return (
     <SidebarProvider>
@@ -460,11 +499,31 @@ function FlowCanvas() {
               onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) handleGenerateRoadmap(); }}
               aria-label="Project idea input field"
             />
-            <Button onClick={handleGenerateRoadmap} disabled={isLoading} className="w-full sm:w-auto shrink-0 px-6">
-              {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
+            <Button onClick={handleGenerateRoadmap} disabled={isLoading} className="w-full sm:w-auto shrink-0 px-4">
+              {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
               {isLoading ? 'Generating...' : 'Generate Roadmap'}
             </Button>
-            <div className="sm:ml-auto flex items-center gap-2">
+            <div className="sm:ml-auto flex items-center gap-1">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handleExpandAllNodes} 
+                disabled={isLoading || nodes.length === 0 || nodes.every(n => n.data.isLoading)}
+                title="Expand All Descriptions"
+                aria-label="Expand all node descriptions"
+              >
+                <Maximize className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handleCollapseAllNodes}
+                disabled={isLoading || nodes.length === 0 || nodes.every(n => n.data.isLoading)}
+                title="Collapse All Descriptions"
+                aria-label="Collapse all node descriptions"
+              >
+                <Minimize className="h-4 w-4" />
+              </Button>
               <ThemeToggle />
               <SidebarTrigger className="hidden sm:flex" /> {/* Desktop trigger */}
             </div>
@@ -515,3 +574,4 @@ export default function RoadmapPage() {
     </ReactFlowProvider>
   );
 }
+
