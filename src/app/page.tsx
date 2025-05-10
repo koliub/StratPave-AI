@@ -14,6 +14,7 @@ import ReactFlow, {
   type OnEdgesChange,
   ReactFlowProvider,
   useReactFlow,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -23,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils'; // cn is not used in this file
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -37,7 +38,7 @@ function FlowCanvas() {
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [promptText, setPromptText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [nodeIdCounter, setNodeIdCounter] = useState(0); // Used for unique ID generation for nodes
+  const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
 
@@ -52,13 +53,13 @@ function FlowCanvas() {
   );
   
   useEffect(() => {
-    if (reactFlowInstance && nodes.length > 0) {
+    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0)) {
       const timer = setTimeout(() => {
         reactFlowInstance.fitView({ duration: 300, padding: 0.2 });
       }, 150); 
       return () => clearTimeout(timer);
     }
-  }, [nodes, reactFlowInstance]);
+  }, [nodes, edges, reactFlowInstance]);
 
   const handleGenerateRoadmap = async () => {
     if (!promptText.trim()) {
@@ -72,22 +73,17 @@ function FlowCanvas() {
 
     setIsLoading(true);
     
-    // Clear existing nodes when generating a new roadmap
-    // Or, you might want to append. For now, let's clear.
-    // setNodes([]); 
-    // setEdges([]);
-    // If appending, ensure nodeIdCounter logic is robust or use UUIDs for roadmap step IDs from AI.
-
-    // Add temporary loading nodes
+    const tempLoadingNodeId = `loading_node_${nodeIdCounter}`;
     const tempLoadingNode: Node<WordNodeData> = {
-      id: `loading_node_${nodeIdCounter}`,
+      id: tempLoadingNodeId,
       type: 'wordNode',
-      position: { x: 50, y: 50 }, // Adjust as needed, or center it
+      position: { x: 50, y: 50 }, 
       data: { title: 'Generating Roadmap...', isLoading: true },
       draggable: true,
       selectable: true,
     };
-    setNodes([tempLoadingNode]); // Replace current nodes with a single loading node
+    setNodes([tempLoadingNode]);
+    setEdges([]); // Clear previous edges
     setNodeIdCounter(prev => prev + 1);
 
 
@@ -100,17 +96,18 @@ function FlowCanvas() {
           description: 'The AI did not return any roadmap steps. Try a different prompt.',
           variant: 'default',
         });
-        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNode.id)); // Remove loading node
+        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId)); 
+        setEdges([]);
         return;
       }
 
       const newNodes: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
-        const currentNodesCount = index; // Use index for positioning new batch
-        const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50; // 280 for wider nodes
-        const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50; // 200 for taller nodes + desc
+        const currentNodesCount = index; 
+        const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50; 
+        const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
 
         return {
-          id: `roadmapnode_${step.id}_${nodeIdCounter + index}`, // Ensure unique ID using AI's step.id and counter
+          id: `roadmapnode_${step.id}_${nodeIdCounter + index}`, 
           type: 'wordNode',
           position: { x: xPosition, y: yPosition },
           data: { title: step.title, description: step.description, isLoading: false },
@@ -119,8 +116,31 @@ function FlowCanvas() {
         };
       });
       
+      const newEdges: Edge[] = [];
+      if (newNodes.length > 1) {
+        for (let i = 0; i < newNodes.length - 1; i++) {
+          newEdges.push({
+            id: `e-${newNodes[i].id}-${newNodes[i+1].id}`,
+            source: newNodes[i].id,
+            target: newNodes[i+1].id,
+            animated: true,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: 'hsl(var(--accent))',
+            },
+            style: {
+              strokeWidth: 2,
+              stroke: 'hsl(var(--accent))',
+            }
+          });
+        }
+      }
+      
       setNodeIdCounter(prev => prev + result.roadmap.length);
-      setNodes(newNodes); // Replace loading node with actual roadmap nodes
+      setNodes(newNodes); 
+      setEdges(newEdges);
 
       toast({
         title: 'Roadmap Generated!',
@@ -142,8 +162,8 @@ function FlowCanvas() {
         description: errorMessage,
         variant: 'destructive',
       });
-      // Remove loading node on error
-      setNodes((nds) => nds.filter(node => node.id !== tempLoadingNode.id));
+      setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
+      setEdges([]);
     } finally {
       setIsLoading(false);
     }
@@ -187,6 +207,7 @@ function FlowCanvas() {
           <MiniMap 
             nodeStrokeWidth={3} 
             nodeColor={(node) => {
+              if (node.type === 'wordNode' && node.data.isLoading) return 'hsl(var(--muted-foreground))';
               if (node.type === 'wordNode') return 'hsl(var(--accent))';
               return 'hsl(var(--muted-foreground))'; 
             }} 
@@ -209,3 +230,4 @@ export default function RoadmapPage() {
     </ReactFlowProvider>
   );
 }
+
