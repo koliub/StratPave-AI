@@ -61,12 +61,18 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   }, [data.description, isEditingDescription]);
 
+  useEffect(() => {
+    if (data.isDone && hasDescription) {
+      setIsExpanded(false);
+    }
+  }, [data.isDone, hasDescription]);
+
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
       data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
     } else {
-      setEditedTitle(data.title);
+      setEditedTitle(data.title); // Revert to original if save is attempted with empty title
     }
     setIsEditingTitle(false);
   };
