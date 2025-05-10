@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 "use client";
 
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save, XSquare } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save, XSquare, PlusSquare } from 'lucide-react';
 
 export type WordNodeData = {
   title: string;
@@ -18,7 +19,8 @@ export type WordNodeData = {
   isDone?: boolean;
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
-  onDeleteNode?: (id: string) => void; // Added for micro-toolbar
+  onDeleteNode?: (id: string) => void;
+  onAddNodeAfter?: (id: string) => void; // New callback for adding a node after
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
@@ -100,10 +102,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   };
 
+  const handleAddNode = () => {
+    if (data.onAddNodeAfter && !data.isLoading) {
+      data.onAddNodeAfter(id);
+    }
+  };
+
   return (
     <Card
       className={cn(
-        "w-64 shadow-xl transition-all duration-300 group relative", // Added relative positioning
+        "w-64 shadow-xl transition-all duration-300 group relative",
         data.isLoading ? 'opacity-70' : '',
         data.isDone ? 'opacity-60' : 'opacity-100',
         'bg-card text-card-foreground border-border',
@@ -114,18 +122,32 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       aria-checked={data.isDone}
       aria-expanded={hasDescription ? isExpanded : undefined}
     >
-      {selected && !data.isLoading && data.onDeleteNode && (
-        <div className="absolute -top-2 -right-2 z-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleDelete}
-            className="h-6 w-6 p-0.5 bg-card hover:bg-destructive hover:text-destructive-foreground rounded-full shadow-md border border-border"
-            aria-label="Delete node"
-            title="Delete node"
-          >
-            <XSquare className="h-4 w-4" />
-          </Button>
+      {selected && !data.isLoading && (data.onDeleteNode || data.onAddNodeAfter) && (
+        <div className="absolute -top-2 -right-10 z-10 flex flex-col space-y-1">
+          {data.onDeleteNode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDelete}
+              className="h-7 w-7 p-1 bg-card hover:bg-destructive hover:text-destructive-foreground rounded-full shadow-md border border-border"
+              aria-label="Delete step"
+              title="Delete step (Del / Ctrl+X)"
+            >
+              <XSquare className="h-5 w-5" />
+            </Button>
+          )}
+          {data.onAddNodeAfter && (
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleAddNode}
+              className="h-7 w-7 p-1 bg-card hover:bg-accent hover:text-accent-foreground rounded-full shadow-md border border-border"
+              aria-label="Add step after"
+              title="Add step after"
+            >
+              <PlusSquare className="h-5 w-5" />
+            </Button>
+          )}
         </div>
       )}
       <CardHeader className="p-3 pb-2">
@@ -225,3 +247,4 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     </Card>
   );
 }
+

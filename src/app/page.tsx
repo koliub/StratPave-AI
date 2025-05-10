@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -21,9 +22,8 @@ import { WordNode, type WordNodeData } from '@/components/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { MainToolbar } from '@/components/main-toolbar'; 
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -112,28 +112,86 @@ function FlowCanvas() {
     [setNodes, toast]
   );
 
-  const handleAddNode = useCallback(() => {
+  const handleAddNodeAfter = useCallback((currentNodeId: string) => {
     if (isLoading) return;
-    const newId = `manualnode_${nodeIdCounter}`;
+
+    const newInternalId = `manualnode_${nodeIdCounter}`;
     setNodeIdCounter(prev => prev + 1);
-    const newNode: Node<WordNodeData> = {
-      id: newId,
-      type: 'wordNode',
-      position: { x: 50 + (nodes.length % 5) * 100 , y: 50 + Math.floor(nodes.length / 5) * 50 }, // Basic positioning
-      data: {
-        title: 'New Step',
-        description: 'Double-click description to edit.',
-        isDone: false,
-        onToggleDone: handleToggleNodeDone,
-        onUpdateNodeData: handleUpdateNodeData,
-        onDeleteNode: handleDeleteNode, 
-      },
-      draggable: true,
-      selectable: true,
+
+    const currentNode = nodes.find(n => n.id === currentNodeId);
+    if (!currentNode) {
+        toast({ title: "Error", description: "Could not find the current node to add after.", variant: "destructive"});
+        return;
+    }
+    
+    // Position new node slightly below and to the right of the current node
+    const newNodePosition = {
+        x: currentNode.position.x + 0, 
+        y: currentNode.position.y + (currentNode.height || 150) + 60, // Estimated height + gap
     };
+
+    const newNode: Node<WordNodeData> = {
+        id: newInternalId,
+        type: 'wordNode',
+        position: newNodePosition,
+        data: {
+            title: 'New Step',
+            description: 'Double-click description to edit.',
+            isDone: false,
+            onToggleDone: handleToggleNodeDone,
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode,
+            onAddNodeAfter: handleAddNodeAfter, 
+        },
+        draggable: true,
+        selectable: true,
+    };
+
     setNodes(nds => [...nds, newNode]);
+
+    const outgoingEdge = edges.find(edge => edge.source === currentNodeId);
+
+    if (outgoingEdge) {
+        const successorId = outgoingEdge.target;
+        setEdges(eds => [
+            ...eds.filter(edge => edge.id !== outgoingEdge.id), 
+            { 
+                id: `e-${currentNodeId}-${newNode.id}`,
+                source: currentNodeId,
+                target: newNode.id,
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+            },
+            { 
+                id: `e-${newNode.id}-${successorId}`,
+                source: newNode.id,
+                target: successorId,
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+            },
+        ]);
+    } else {
+        setEdges(eds => [
+            ...eds,
+            {
+                id: `e-${currentNodeId}-${newNode.id}`,
+                source: currentNodeId,
+                target: newNode.id,
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+                style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+            },
+        ]);
+    }
+
     toast({ title: "New step added!" });
-  }, [isLoading, nodeIdCounter, nodes.length, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, toast]);
+    // Fit view after a short delay to allow React Flow to process new node/edges
+    setTimeout(() => reactFlowInstance.fitView({duration: 300, padding: 0.2}), 100);
+
+  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, setNodes, setEdges, toast, reactFlowInstance]);
+
 
   const handleDeleteSelectedNodes = useCallback(() => {
     if (isLoading) return;
@@ -150,11 +208,8 @@ function FlowCanvas() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isLoading) return;
       if (event.key === 'Delete' || (event.key === 'x' && (event.ctrlKey || event.metaKey))) {
-        // Check if an input or textarea is focused
         const activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          // If an input/textarea is focused, don't delete nodes
-          // This allows Ctrl+X to work for cutting text in inputs
           if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
             return;
           }
@@ -192,6 +247,7 @@ function FlowCanvas() {
         onToggleDone: handleToggleNodeDone,
         onUpdateNodeData: handleUpdateNodeData,
         onDeleteNode: handleDeleteNode,
+        onAddNodeAfter: handleAddNodeAfter,
       },
       draggable: true,
       selectable: true,
@@ -232,6 +288,7 @@ function FlowCanvas() {
             onToggleDone: handleToggleNodeDone, 
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode, 
+            onAddNodeAfter: handleAddNodeAfter,
           },
           draggable: true,
           selectable: true,
@@ -311,7 +368,7 @@ function FlowCanvas() {
           </Button>
         </div>
       </header>
-      <MainToolbar onAddNode={handleAddNode} isLoading={isLoading} />
+      
       <main className="flex-grow relative" aria-label="React Flow canvas area">
         <ReactFlow
           nodes={nodes}
@@ -322,7 +379,7 @@ function FlowCanvas() {
           fitViewOptions={{ padding: 0.2, duration: 300 }}
           className="bg-background"
           proOptions={{ hideAttribution: true }}
-          deleteKeyCode={null} // Disable default delete key handling, we use our own
+          deleteKeyCode={null} 
         >
           <Controls 
             className="[&_button]:bg-card [&_button]:border-border [&_button:hover]:bg-muted [&_button_svg]:fill-foreground" 
@@ -355,3 +412,4 @@ export default function RoadmapPage() {
     </ReactFlowProvider>
   );
 }
+
