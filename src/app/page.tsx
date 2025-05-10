@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -24,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { MainToolbar } from '@/components/main-toolbar'; // Import MainToolbar
+import { MainToolbar } from '@/components/main-toolbar'; 
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -151,6 +150,15 @@ function FlowCanvas() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isLoading) return;
       if (event.key === 'Delete' || (event.key === 'x' && (event.ctrlKey || event.metaKey))) {
+        // Check if an input or textarea is focused
+        const activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+          // If an input/textarea is focused, don't delete nodes
+          // This allows Ctrl+X to work for cutting text in inputs
+          if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
+            return;
+          }
+        }
         handleDeleteSelectedNodes();
       }
     };
@@ -314,7 +322,6 @@ function FlowCanvas() {
           fitViewOptions={{ padding: 0.2, duration: 300 }}
           className="bg-background"
           proOptions={{ hideAttribution: true }}
-          multiSelectionKey="ctrl" // Already default on win/linux, good to be explicit
           deleteKeyCode={null} // Disable default delete key handling, we use our own
         >
           <Controls 
