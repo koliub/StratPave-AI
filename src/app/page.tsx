@@ -24,7 +24,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-// import { cn } from '@/lib/utils'; // cn is not used in this file
 
 const nodeTypes = {
   wordNode: WordNode,
@@ -61,6 +60,24 @@ function FlowCanvas() {
     }
   }, [nodes, edges, reactFlowInstance]);
 
+  const handleToggleNodeDone = useCallback((nodeId: string) => {
+    setNodes((prevNodes) =>
+      prevNodes.map((node) => {
+        if (node.id === nodeId) {
+          const currentIsDone = node.data?.isDone ?? false;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              isDone: !currentIsDone,
+            },
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
   const handleGenerateRoadmap = async () => {
     if (!promptText.trim()) {
       toast({
@@ -78,7 +95,7 @@ function FlowCanvas() {
       id: tempLoadingNodeId,
       type: 'wordNode',
       position: { x: 50, y: 50 }, 
-      data: { title: 'Generating Roadmap...', isLoading: true },
+      data: { title: 'Generating Roadmap...', isLoading: true, onToggleDone: handleToggleNodeDone },
       draggable: true,
       selectable: true,
     };
@@ -110,7 +127,13 @@ function FlowCanvas() {
           id: `roadmapnode_${step.id}_${nodeIdCounter + index}`, 
           type: 'wordNode',
           position: { x: xPosition, y: yPosition },
-          data: { title: step.title, description: step.description, isLoading: false },
+          data: { 
+            title: step.title, 
+            description: step.description, 
+            isLoading: false, 
+            isDone: false, // Initialize isDone to false
+            onToggleDone: handleToggleNodeDone, // Pass callback
+          },
           draggable: true,
           selectable: true,
         };
@@ -208,6 +231,7 @@ function FlowCanvas() {
             nodeStrokeWidth={3} 
             nodeColor={(node) => {
               if (node.type === 'wordNode' && node.data.isLoading) return 'hsl(var(--muted-foreground))';
+              if (node.type === 'wordNode' && node.data.isDone) return 'hsl(var(--success))';
               if (node.type === 'wordNode') return 'hsl(var(--accent))';
               return 'hsl(var(--muted-foreground))'; 
             }} 

@@ -16,8 +16,8 @@
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
-    --accent: 180 100% 25%; /* Teal accent (#008080) */
-    --accent-foreground: 0 0% 100%; /* White text for teal accent */
+    --accent: 60 90% 45%; /* Yellow accent (#e6e61a) */
+    --accent-foreground: 0 0% 3.9%; /* Dark text for yellow accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
@@ -37,6 +37,8 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --success: 134 61% 41%; /* Green for success states */
+    --success-foreground: 0 0% 100%; /* White text for success states */
   }
   .dark {
     --background: 240 6% 10%; /* Neutral dark background */
@@ -51,8 +53,8 @@
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 180 70% 45%; /* Brighter Teal accent for dark mode */
-    --accent-foreground: 0 0% 100%; /* White text for teal accent */
+    --accent: 60 80% 55%; /* Brighter Yellow accent for dark mode */
+    --accent-foreground: 0 0% 3.9%; /* Dark text for yellow accent */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
@@ -71,6 +73,8 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --success: 134 50% 50%; /* Adjusted green for dark mode visibility */
+    --success-foreground: 0 0% 100%; /* White text for success states */
   }
 }
 
