@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -28,24 +29,15 @@ const nodeTypes = {
   wordNode: WordNode,
 };
 
-const initialNodes: Node<WordNodeData>[] = [
-  {
-    id: '1',
-    type: 'wordNode',
-    position: { x: 0, y: 0 }, // Centered by fitView initially
-    data: { label: 'Enter prompt', isLoading: false },
-    draggable: true,
-    selectable: true,
-  },
-];
-
+const initialNodes: Node<WordNodeData>[] = []; // Start with an empty canvas
 const initialEdges: Edge[] = [];
 
 function FlowCanvas() {
   const [nodes, setNodes] = useState<Node<WordNodeData>[]>(initialNodes);
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
-  const [promptText, setPromptText] = useState(''); // Renamed to avoid conflict with AI flow import
+  const [promptText, setPromptText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
 
@@ -59,16 +51,15 @@ function FlowCanvas() {
     [setEdges]
   );
   
+  // Fit view when nodes change and reactFlowInstance is available
   useEffect(() => {
-    // Ensure fitView is called after the instance is available
-    if (reactFlowInstance) {
-      // A small delay can help ensure the layout is stable before fitting
+    if (reactFlowInstance && nodes.length > 0) {
       const timer = setTimeout(() => {
-        reactFlowInstance.fitView({ duration: 200, padding: 0.3 });
-      }, 50);
+        reactFlowInstance.fitView({ duration: 300, padding: 0.3 });
+      }, 100); // Small delay to allow DOM update
       return () => clearTimeout(timer);
     }
-  }, [reactFlowInstance]);
+  }, [nodes, reactFlowInstance]);
 
 
   const handleSummarize = async () => {
@@ -82,27 +73,37 @@ function FlowCanvas() {
     }
 
     setIsLoading(true);
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === '1' ? { ...node, data: { ...node.data, isLoading: true, label: 'Processing...' } } : node
-      )
-    );
+    
+    const newNodeId = `wordnode_${nodeIdCounter}`;
+    setNodeIdCounter(prev => prev + 1);
+
+    const numCurrentNodes = nodes.length;
+    // Calculate position for the new node, arranging them in a grid-like fashion
+    // Add some random jitter for a more organic look
+    const xPosition = (numCurrentNodes % 4) * 220 + (Math.random() * 40 - 20) + 50; 
+    const yPosition = Math.floor(numCurrentNodes / 4) * 150 + (Math.random() * 40 - 20) + 50;
+
+    const newNode: Node<WordNodeData> = {
+      id: newNodeId,
+      type: 'wordNode',
+      position: { x: xPosition, y: yPosition },
+      data: { label: 'Processing...', isLoading: true },
+      draggable: true,
+      selectable: true,
+    };
+
+    setNodes((nds) => [...nds, newNode]);
 
     try {
       const result = await summarizePrompt({ prompt: promptText });
       setNodes((nds) =>
         nds.map((node) =>
-          node.id === '1'
-            ? { ...node, draggable: true, selectable: true, data: { label: result.singleWord, isLoading: false } }
+          node.id === newNodeId
+            ? { ...node, data: { label: result.singleWord, isLoading: false } }
             : node
         )
       );
-      if (reactFlowInstance) {
-        // Small delay to allow node to re-render with new text before fitting view
-        setTimeout(() => {
-            reactFlowInstance.fitView({ duration: 300, padding: 0.3 });
-        }, 100);
-      }
+      // fitView is handled by the useEffect watching `nodes`
     } catch (error) {
       console.error('Summarization error:', error);
       toast({
@@ -112,7 +113,9 @@ function FlowCanvas() {
       });
       setNodes((nds) =>
         nds.map((node) =>
-          node.id === '1' ? { ...node, data: { ...node.data, isLoading: false, label: 'Error!' } } : node
+          node.id === newNodeId 
+            ? { ...node, data: { ...node.data, isLoading: false, label: 'Error!' } } 
+            : node
         )
       );
     } finally {
@@ -146,10 +149,10 @@ function FlowCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.3, duration: 200 }} // Increased padding
+          // fitView prop removed to rely on programmatic fitView via useEffect
+          fitViewOptions={{ padding: 0.3, duration: 200 }}
           className="bg-background"
-          proOptions={{ hideAttribution: true }} // Hide React Flow attribution for cleaner look
+          proOptions={{ hideAttribution: true }}
         >
           <Controls 
             className="[&_button]:bg-card [&_button]:border-border [&_button:hover]:bg-muted [&_button_svg]:fill-foreground" 
