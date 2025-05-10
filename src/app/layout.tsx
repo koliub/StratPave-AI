@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body 
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
         <ThemeProvider defaultTheme="system" storageKey="ai-roadmap-theme">
           {children}
