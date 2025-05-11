@@ -21,9 +21,10 @@ import Link from 'next/link';
 
 import { WordNode, type WordNodeData } from '@/components/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
+import { generateSubRoadmap } from '@/ai/flows/generate-sub-roadmap-flow'; // Import new flow
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Maximize, Minimize, MapIcon, HomeIcon } from 'lucide-react'; 
+import { Loader2, Maximize, Minimize, MapIcon, HomeIcon, GitBranch } from 'lucide-react'; 
 import { useToast } from '@/hooks/use-toast';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
@@ -43,12 +44,14 @@ const initialNodes: Node<WordNodeData>[] = [];
 const initialEdges: Edge[] = [];
 
 const DEFAULT_NODE_COLOR = '#A0A0A0'; 
+const SUB_NODE_COLOR = '#C0C0C0'; // Slightly different color for sub-nodes
 
 function FlowCanvas() {
   const [nodes, setNodes] = useState<Node<WordNodeData>[]>(initialNodes);
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [promptText, setPromptText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSubRoadmapForNodeId, setIsLoadingSubRoadmapForNodeId] = useState<string | null>(null);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
   const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
   const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
@@ -93,12 +96,12 @@ function FlowCanvas() {
   }, [setNodes]);
 
   const handleDeleteNode = useCallback((nodeIdToDelete: string) => {
-    if (isLoading) return;
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
     const nodeToDelete = nodes.find(n => n.id === nodeIdToDelete);
     setNodes(nds => nds.filter(node => node.id !== nodeIdToDelete));
     setEdges(eds => eds.filter(edge => edge.source !== nodeIdToDelete && edge.target !== nodeIdToDelete));
     toast({ title: `Step "${nodeToDelete?.data?.title || 'Unknown'}" deleted.` });
-  }, [nodes, setNodes, setEdges, toast, isLoading]);
+  }, [nodes, setNodes, setEdges, toast, isLoading, isLoadingSubRoadmapForNodeId]);
   
 
   const handleManualToggleExpansion = useCallback((nodeId: string, explicitlyExpanded?: boolean) => {
@@ -131,8 +134,8 @@ function FlowCanvas() {
           let newOverrideState: boolean | undefined = node.data._isExpandedOverride; 
 
           if (globalExpansionOverride === null) { 
-            if (newIsDone && node.data.description) { // If marking done and has description
-              newOverrideState = false; // Collapse it
+            if (newIsDone && node.data.description) { 
+              newOverrideState = false; 
             }
           } else { 
              newOverrideState = globalExpansionOverride;
@@ -177,8 +180,153 @@ function FlowCanvas() {
     [setNodes, toast]
   );
 
+  const handleGenerateSubRoadmap = useCallback(async (parentNodeId: string) => {
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
+
+    const parentNode = nodes.find(n => n.id === parentNodeId);
+    if (!parentNode) {
+      toast({ title: "Error", description: "Parent node not found.", variant: "destructive" });
+      return;
+    }
+    if (!promptText.trim()) {
+       toast({ title: "Error", description: "Main project prompt is missing. Please enter it at the top.", variant: "destructive" });
+      return;
+    }
+
+    setIsLoadingSubRoadmapForNodeId(parentNodeId);
+    toast({ title: "Generating Sub-Roadmap...", description: `Breaking down step: "${parentNode.data.title}"` });
+
+    try {
+      const result = await generateSubRoadmap({
+        mainProjectPrompt: promptText,
+        parentStepTitle: parentNode.data.title,
+        parentStepDescription: parentNode.data.description,
+      });
+
+      if (!result.subRoadmap || result.subRoadmap.length === 0) {
+        toast({
+          title: 'No Sub-Roadmap Generated',
+          description: 'The AI did not return any sub-steps. Try a different parent step or refine the main prompt.',
+        });
+        setIsLoadingSubRoadmapForNodeId(null);
+        return;
+      }
+
+      const parentNodeIndex = nodes.findIndex(n => n.id === parentNodeId);
+      const newSubNodes: Node<WordNodeData>[] = result.subRoadmap.map((step, index) => {
+        const newId = `subnode_${parentNodeId}_${step.id}_${nodeIdCounter + index}`;
+        return {
+          id: newId,
+          type: 'wordNode',
+          position: { 
+            x: parentNode.position.x + 30, // Indent sub-nodes
+            y: parentNode.position.y + (parentNode.height || 150) + 70 + (index * 100) // Stack vertically
+          },
+          data: {
+            title: `Sub: ${step.title}`,
+            description: step.description,
+            isDone: false,
+            isSubStep: true, // Mark as sub-step
+            onToggleDone: handleToggleNodeDone,
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode,
+            onAddNodeAfter: handleAddNodeAfter,
+            onGenerateSubRoadmap: handleGenerateSubRoadmap,
+            onManualToggleExpansion: handleManualToggleExpansion,
+            onUpdateNodeColor: handleUpdateNodeColor,
+            color: SUB_NODE_COLOR,
+            _isExpandedOverride: !!step.description,
+          },
+          draggable: true,
+          selectable: true,
+        };
+      });
+      
+      setNodeIdCounter(prev => prev + result.subRoadmap.length);
+
+      let newEdgesArray = [...edges];
+      const originalOutgoingEdge = newEdgesArray.find(edge => edge.source === parentNodeId);
+      const originalSuccessorId = originalOutgoingEdge?.target;
+
+      // Remove original outgoing edge from parent
+      if (originalOutgoingEdge) {
+        newEdgesArray = newEdgesArray.filter(edge => edge.id !== originalOutgoingEdge.id);
+      }
+
+      // Connect parent to first sub-node
+      newEdgesArray.push({
+        id: `e-${parentNodeId}-${newSubNodes[0].id}`,
+        source: parentNodeId,
+        target: newSubNodes[0].id,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+        style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+      });
+
+      // Connect sub-nodes sequentially
+      for (let i = 0; i < newSubNodes.length - 1; i++) {
+        newEdgesArray.push({
+          id: `e-${newSubNodes[i].id}-${newSubNodes[i+1].id}`,
+          source: newSubNodes[i].id,
+          target: newSubNodes[i+1].id,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+        });
+      }
+
+      // Connect last sub-node to original successor (if any)
+      if (originalSuccessorId) {
+        newEdgesArray.push({
+          id: `e-${newSubNodes[newSubNodes.length - 1].id}-${originalSuccessorId}`,
+          source: newSubNodes[newSubNodes.length - 1].id,
+          target: originalSuccessorId,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+        });
+      }
+      
+      // Insert new nodes into the nodes array
+      const updatedNodes = [
+        ...nodes.slice(0, parentNodeIndex + 1),
+        ...newSubNodes,
+        ...nodes.slice(parentNodeIndex + 1)
+      ];
+
+      setNodes(updatedNodes);
+      setEdges(newEdgesArray);
+
+      toast({
+        title: 'Sub-Roadmap Generated!',
+        description: `Added ${newSubNodes.length} sub-steps for "${parentNode.data.title}".`,
+      });
+      setTimeout(() => reactFlowInstance.fitView({ duration: 500, padding: 0.2 }), 100);
+
+    } catch (error) {
+      console.error('Sub-roadmap generation error:', error);
+      let errorMessage = 'Failed to generate sub-roadmap. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast({
+        title: 'Error Generating Sub-Roadmap',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSubRoadmapForNodeId(null);
+    }
+  }, [
+    nodes, edges, nodeIdCounter, promptText, 
+    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, 
+    handleManualToggleExpansion, handleUpdateNodeColor, 
+    toast, reactFlowInstance, isLoading, isLoadingSubRoadmapForNodeId
+  ]);
+
+
   const handleAddNodeAfter = useCallback((currentNodeId: string) => {
-    if (isLoading) return;
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
 
     const newInternalId = `manualnode_${nodeIdCounter}`;
     setNodeIdCounter(prev => prev + 1);
@@ -208,10 +356,11 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
             onAddNodeAfter: handleAddNodeAfter,
+            onGenerateSubRoadmap: handleGenerateSubRoadmap, 
             onManualToggleExpansion: handleManualToggleExpansion,
             onUpdateNodeColor: handleUpdateNodeColor,
             color: DEFAULT_NODE_COLOR,
-            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : true, // New nodes default to expanded
+            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : true, 
         },
         draggable: true,
         selectable: true,
@@ -252,22 +401,27 @@ function FlowCanvas() {
     toast({ title: "New step added!" });
     setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
 
-  }, [isLoading, nodes, edges, nodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, globalExpansionOverride, handleManualToggleExpansion, handleUpdateNodeColor, setNodes, setEdges, toast, reactFlowInstance]);
+  }, [
+      isLoading, isLoadingSubRoadmapForNodeId, nodes, edges, nodeIdCounter, 
+      handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
+      handleGenerateSubRoadmap, globalExpansionOverride, handleManualToggleExpansion, 
+      handleUpdateNodeColor, setNodes, setEdges, toast, reactFlowInstance
+    ]);
 
 
   const handleDeleteSelectedNodes = useCallback(() => {
-    if (isLoading) return;
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
     const selectedNodeIds = nodes.filter(n => n.selected).map(n => n.id);
     if (selectedNodeIds.length === 0) return;
 
     setNodes(nds => nds.filter(node => !node.selected));
     setEdges(eds => eds.filter(edge => !selectedNodeIds.includes(edge.source) && !selectedNodeIds.includes(edge.target)));
     toast({ title: `${selectedNodeIds.length} step(s) deleted.` });
-  }, [isLoading, nodes, setNodes, setEdges, toast]);
+  }, [isLoading, isLoadingSubRoadmapForNodeId, nodes, setNodes, setEdges, toast]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isLoading) return;
+      if (isLoading || isLoadingSubRoadmapForNodeId) return;
       if (event.key === 'Delete' || (event.key === 'x' && (event.ctrlKey || event.metaKey))) {
         const activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
@@ -285,7 +439,7 @@ function FlowCanvas() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleDeleteSelectedNodes, isLoading]);
+  }, [handleDeleteSelectedNodes, isLoading, isLoadingSubRoadmapForNodeId]);
 
   const doGenerateRoadmap = useCallback(async (currentPrompt?: string) => {
     const promptToUse = typeof currentPrompt === 'string' ? currentPrompt : promptText;
@@ -314,7 +468,9 @@ function FlowCanvas() {
         onUpdateNodeData: handleUpdateNodeData,
         onDeleteNode: handleDeleteNode,
         onAddNodeAfter: handleAddNodeAfter,
+        onGenerateSubRoadmap: handleGenerateSubRoadmap, 
         onManualToggleExpansion: handleManualToggleExpansion,
+        onUpdateNodeColor: handleUpdateNodeColor,
       },
       draggable: true,
       selectable: true,
@@ -356,10 +512,11 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode, 
             onAddNodeAfter: handleAddNodeAfter,
+            onGenerateSubRoadmap: handleGenerateSubRoadmap, 
             onManualToggleExpansion: handleManualToggleExpansion,
             onUpdateNodeColor: handleUpdateNodeColor, 
             color: DEFAULT_NODE_COLOR, 
-            _isExpandedOverride: !!step.description, // Default to expanded if description exists
+            _isExpandedOverride: !!step.description, 
           },
           draggable: true,
           selectable: true,
@@ -418,7 +575,7 @@ function FlowCanvas() {
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptText, nodeIdCounter, toast, reactFlowInstance]); // Dependencies for useCallback
+  }, [promptText, nodeIdCounter, toast, reactFlowInstance, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, handleManualToggleExpansion, handleUpdateNodeColor, handleGenerateSubRoadmap]);
 
   useEffect(() => {
     const initialPromptFromQuery = searchParams.get('prompt');
@@ -429,12 +586,8 @@ function FlowCanvas() {
         generationAttempted.current = true;
       }
     } else if (projectId !== 'new' && initialPromptFromQuery) {
-        // This could be for loading a "mock" project by its name if ID matches prompt
-        // Or for a real project, fetch by projectId and setPromptText to its actual title/prompt
-        setPromptText(initialPromptFromQuery); // Set prompt for display, but don't auto-generate
-        // Potentially load nodes/edges if projectId is not 'new' and represents a saved project
-        // For now, this will just show the prompt. If you click "Generate Roadmap", it will use this prompt.
-        generationAttempted.current = false; // Allow generation if user clicks button
+        setPromptText(initialPromptFromQuery); 
+        generationAttempted.current = false; 
     }
   }, [projectId, searchParams, doGenerateRoadmap, nodes.length, isLoading]);
 
@@ -451,12 +604,12 @@ function FlowCanvas() {
   };
 
   const handleExpandAllNodes = () => {
-    if (isLoading || nodes.length === 0) return;
+    if (isLoading || nodes.length === 0 || isLoadingSubRoadmapForNodeId) return;
     setGlobalExpansionOverride(true);
   };
 
   const handleCollapseAllNodes = () => {
-    if (isLoading || nodes.length === 0) return;
+    if (isLoading || nodes.length === 0 || isLoadingSubRoadmapForNodeId) return;
     setGlobalExpansionOverride(false);
   };
 
@@ -468,14 +621,14 @@ function FlowCanvas() {
         return { ...n, data: { ...n.data, _isExpandedOverride: globalExpansionOverride } };
       }));
     }
-  }, [globalExpansionOverride, nodes.length, setNodes]); // setNodes added as per ESLint suggestion, usually stable
+  }, [globalExpansionOverride, nodes.length, setNodes]); 
 
 
   return (
     <SidebarProvider>
       <RoadmapSidebar 
         nodes={nodes}
-        isLoading={isLoading}
+        isLoading={isLoading || !!isLoadingSubRoadmapForNodeId}
         selectedNodeIdFromSidebar={selectedNodeIdFromSidebar}
         onNodeSelect={handleNodeSelectFromSidebar}
       />
@@ -494,11 +647,11 @@ function FlowCanvas() {
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
               className="flex-grow min-w-0 h-10"
-              disabled={isLoading}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) doGenerateRoadmap(); }}
+              disabled={isLoading || !!isLoadingSubRoadmapForNodeId}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading && !isLoadingSubRoadmapForNodeId) doGenerateRoadmap(); }}
               aria-label="Project idea input field"
             />
-            <Button onClick={() => doGenerateRoadmap()} disabled={isLoading} className="w-full sm:w-auto shrink-0 px-4 h-10">
+            <Button onClick={() => doGenerateRoadmap()} disabled={isLoading || !!isLoadingSubRoadmapForNodeId} className="w-full sm:w-auto shrink-0 px-4 h-10">
               {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
               {isLoading ? 'Generating...' : (nodes.length > 0 ? 'Regenerate' : 'Generate Roadmap')}
             </Button>
@@ -507,7 +660,7 @@ function FlowCanvas() {
                 variant="outline" 
                 size="icon" 
                 onClick={handleExpandAllNodes} 
-                disabled={isLoading || nodes.length === 0 || nodes.every(n => n.data.isLoading || !n.data.description)}
+                disabled={isLoading || !!isLoadingSubRoadmapForNodeId || nodes.length === 0 || nodes.every(n => n.data.isLoading || !n.data.description)}
                 title="Expand All Descriptions"
                 aria-label="Expand all node descriptions"
                 className="h-10 w-10"
@@ -518,7 +671,7 @@ function FlowCanvas() {
                 variant="outline" 
                 size="icon" 
                 onClick={handleCollapseAllNodes}
-                disabled={isLoading || nodes.length === 0 || nodes.every(n => n.data.isLoading || !n.data.description)}
+                disabled={isLoading || !!isLoadingSubRoadmapForNodeId || nodes.length === 0 || nodes.every(n => n.data.isLoading || !n.data.description)}
                 title="Collapse All Descriptions"
                 aria-label="Collapse all node descriptions"
                 className="h-10 w-10"
@@ -549,6 +702,11 @@ function FlowCanvas() {
             nodeTypes={nodeTypes}
             isMiniMapVisible={isMiniMapVisible}
           />
+           {isLoadingSubRoadmapForNodeId && (
+            <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-20">
+              <Loader2 className="h-12 w-12 animate-spin text-accent" />
+            </div>
+          )}
         </main>
       </SidebarInset>
     </SidebarProvider>

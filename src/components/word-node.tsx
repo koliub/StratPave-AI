@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 "use client";
 
@@ -10,21 +9,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save, XSquare, PlusSquare } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Circle, CheckCircle2, Save, XSquare, PlusSquare, GitBranch } from 'lucide-react';
 
 export type WordNodeData = {
   title: string;
   description?: string;
-  isLoading?: boolean;
+  isLoading?: boolean; // For main roadmap loading or this node's own loading state
+  isLoadingSubRoadmap?: boolean; // Specifically for when this node is generating a sub-roadmap
   isDone?: boolean;
+  isSubStep?: boolean; // To identify if this node is a sub-step
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
   onAddNodeAfter?: (id: string) => void;
+  onGenerateSubRoadmap?: (id: string) => void;
   _isExpandedOverride?: boolean; 
   onManualToggleExpansion?: (id: string, explicitlyExpanded?: boolean) => void; 
-  color?: string; // Added color prop
-  onUpdateNodeColor?: (id: string, color: string) => void; // Added onUpdateNodeColor prop
+  color?: string;
+  onUpdateNodeColor?: (id: string, color: string) => void;
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
@@ -32,7 +34,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     if (data._isExpandedOverride !== undefined) {
       return data._isExpandedOverride;
     }
-    return !!data.description; // Default to expanded if description exists and no override
+    return !!data.description; 
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(data.title);
@@ -44,7 +46,6 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const hasDescription = !!data.description && !data.isLoading;
 
-  // This effect ensures that if the parent changes _isExpandedOverride, the internal state reflects it.
   useEffect(() => {
     if (data._isExpandedOverride !== undefined) {
       setIsInternallyExpanded(data._isExpandedOverride);
@@ -56,13 +57,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const toggleExpansion = () => {
     if (data.onManualToggleExpansion) {
-      // Pass the *new* desired state (current state inverted)
       data.onManualToggleExpansion(id, !isInternallyExpanded);
     }
-    // The useEffect above will handle setting isInternallyExpanded if _isExpandedOverride changes
-    // Or, if onManualToggleExpansion directly updates _isExpandedOverride which then flows down.
-    // For immediate visual feedback if parent doesn't update _isExpandedOverride instantly:
-    // setIsInternallyExpanded(prev => !prev); // This might be redundant if useEffect handles it
   };
 
 
@@ -95,16 +91,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
-      data.onUpdateNodeData(id, { title: editedTitle, description: data.description }); // Keep current description
+      data.onUpdateNodeData(id, { title: editedTitle, description: data.description }); 
     } else {
-      setEditedTitle(data.title); // Revert if empty
+      setEditedTitle(data.title); 
     }
     setIsEditingTitle(false);
   };
 
   const handleDescriptionSave = () => {
     if (data.onUpdateNodeData) {
-      data.onUpdateNodeData(id, { title: data.title, description: editedDescription }); // Keep current title
+      data.onUpdateNodeData(id, { title: data.title, description: editedDescription }); 
     }
     setIsEditingDescription(false);
   };
@@ -128,14 +124,20 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
   };
 
   const handleDelete = () => {
-    if (data.onDeleteNode && !data.isLoading) {
+    if (data.onDeleteNode && !data.isLoading && !data.isLoadingSubRoadmap) {
       data.onDeleteNode(id);
     }
   };
 
   const handleAddNode = () => {
-    if (data.onAddNodeAfter && !data.isLoading) {
+    if (data.onAddNodeAfter && !data.isLoading && !data.isLoadingSubRoadmap) {
       data.onAddNodeAfter(id);
+    }
+  };
+
+  const handleGenerateSubRoadmap = () => {
+    if (data.onGenerateSubRoadmap && !data.isLoading && !data.isLoadingSubRoadmap) {
+      data.onGenerateSubRoadmap(id);
     }
   };
 
@@ -152,17 +154,17 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       className={cn(
         "w-64 shadow-xl transition-all duration-300 group relative",
         'bg-card text-card-foreground',
-        data.isLoading && 'opacity-70',
-        data.isDone && !data.isLoading && 'opacity-70 border-2 border-success', // Ensure success border is used
-        selected && !data.isLoading && !data.isDone && 'ring-2 ring-primary ring-offset-0', 
-        selected && !data.isLoading && data.isDone && 'ring-2 ring-success ring-offset-0', 
+        (data.isLoading || data.isLoadingSubRoadmap) && 'opacity-70',
+        data.isDone && !data.isLoading && !data.isLoadingSubRoadmap && 'opacity-70 border-2 border-success',
+        selected && !data.isLoading && !data.isLoadingSubRoadmap && !data.isDone && 'ring-2 ring-primary ring-offset-0', 
+        selected && !data.isLoading && !data.isLoadingSubRoadmap && data.isDone && 'ring-2 ring-success ring-offset-0', 
       )}
       style={{...cardStyle, ...doneStyle, ...selectedStyle.ring && {outline: `${selectedStyle.ring} solid ${selectedStyle.ringColor}`, outlineOffset: '1px'}}}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
       aria-expanded={hasDescription ? isEffectivelyExpanded : undefined}
     >
-      {selected && !data.isLoading && (data.onDeleteNode || data.onAddNodeAfter) && (
+      {selected && !data.isLoading && !data.isLoadingSubRoadmap && (data.onDeleteNode || data.onAddNodeAfter || data.onGenerateSubRoadmap) && (
         <div className="absolute -top-3 -right-11 z-10 flex flex-col space-y-1">
           {data.onDeleteNode && (
             <Button
@@ -172,6 +174,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
               className="h-7 w-7 p-1 bg-card hover:bg-destructive hover:text-destructive-foreground rounded-full shadow-md border border-border"
               aria-label="Delete step"
               title="Delete step (Del / Ctrl+X)"
+              disabled={data.isLoadingSubRoadmap}
             >
               <XSquare className="h-5 w-5" />
             </Button>
@@ -184,8 +187,22 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
               className="h-7 w-7 p-1 bg-card hover:bg-accent hover:text-accent-foreground rounded-full shadow-md border border-border"
               aria-label="Add step after"
               title="Add step after"
+              disabled={data.isLoadingSubRoadmap}
             >
               <PlusSquare className="h-5 w-5" />
+            </Button>
+          )}
+           {data.onGenerateSubRoadmap && !data.isSubStep && ( // Conditionally render if not a sub-step itself
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleGenerateSubRoadmap}
+              className="h-7 w-7 p-1 bg-card hover:bg-accent hover:text-accent-foreground rounded-full shadow-md border border-border"
+              aria-label="Generate sub-roadmap for this step"
+              title="Generate sub-roadmap for this step"
+              disabled={data.isLoadingSubRoadmap}
+            >
+              {data.isLoadingSubRoadmap ? <Loader2 className="h-5 w-5 animate-spin" /> : <GitBranch className="h-5 w-5" />}
             </Button>
           )}
         </div>
@@ -203,6 +220,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 className="h-7 w-7 shrink-0 mr-2 p-1"
                 aria-label={data.isDone ? 'Mark as not done' : 'Mark as done'}
                 title={data.isDone ? 'Mark as not done' : 'Mark as done'}
+                disabled={data.isLoadingSubRoadmap}
               >
                 {data.isDone ? (
                   <CheckCircle2 className="h-5 w-5 text-success" />
@@ -211,8 +229,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 )}
               </Button>
             )}
-            <div className="flex-grow min-w-0" onDoubleClick={() => !data.isLoading && !data.isDone && setIsEditingTitle(true)}>
-              {isEditingTitle && !data.isLoading ? (
+            <div className="flex-grow min-w-0" onDoubleClick={() => !data.isLoading && !data.isDone && !data.isLoadingSubRoadmap && setIsEditingTitle(true)}>
+              {isEditingTitle && !data.isLoading && !data.isLoadingSubRoadmap ? (
                 <Input
                   ref={titleInputRef}
                   type="text"
@@ -228,14 +246,14 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                   "text-base font-semibold break-words cursor-pointer relative text-card-foreground",
                    data.isDone && "line-through text-muted-foreground"
                 )}>
-                  {data.isLoading ? 'Generating...' : data.title || 'Untitled Step'}
+                  {data.isLoading ? 'Generating...' : data.isLoadingSubRoadmap ? 'Expanding...' : data.title || 'Untitled Step'}
                 </CardTitle>
               )}
             </div>
           </div>
           <div className="flex items-center shrink-0 pl-1">
-            {data.isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground"/>}
-            {!isEditingTitle && hasDescription && (
+            {(data.isLoading || data.isLoadingSubRoadmap) && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground"/>}
+            {!isEditingTitle && hasDescription && !data.isLoadingSubRoadmap && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -255,9 +273,9 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
           </div>
         </div>
       </CardHeader>
-      {hasDescription && isEffectivelyExpanded && (
-        <CardContent className="p-3 pt-0 text-card-foreground" onDoubleClick={() => !data.isLoading && !data.isDone && setIsEditingDescription(true)}>
-          {isEditingDescription && !data.isLoading ? (
+      {hasDescription && isEffectivelyExpanded && !data.isLoadingSubRoadmap && (
+        <CardContent className="p-3 pt-0 text-card-foreground" onDoubleClick={() => !data.isLoading && !data.isDone && !data.isLoadingSubRoadmap && setIsEditingDescription(true)}>
+          {isEditingDescription && !data.isLoading && !data.isLoadingSubRoadmap ? (
             <div className="relative">
               <Textarea
                 ref={descriptionTextareaRef}
@@ -290,4 +308,3 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     </Card>
   );
 }
-
