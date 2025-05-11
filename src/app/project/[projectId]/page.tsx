@@ -180,6 +180,91 @@ function FlowCanvas() {
     [setNodes, toast]
   );
 
+  const handleAddNodeAfter = useCallback((currentNodeId: string) => {
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
+
+    const newInternalId = `manualnode_${nodeIdCounter}`;
+    setNodeIdCounter(prev => prev + 1);
+
+    const currentNodeIndex = nodes.findIndex(n => n.id === currentNodeId);
+    const currentNode = nodes[currentNodeIndex];
+
+    if (!currentNode) {
+        toast({ title: "Error", description: "Could not find the current node to add after.", variant: "destructive"});
+        return;
+    }
+    
+    const newNodePosition = {
+        x: currentNode.position.x + 0, 
+        y: currentNode.position.y + (currentNode.height || 150) + 60,
+    };
+
+    const newNode: Node<WordNodeData> = {
+        id: newInternalId,
+        type: 'wordNode',
+        position: newNodePosition,
+        data: {
+            title: 'New Step',
+            description: 'Double-click description to edit.',
+            isDone: false,
+            onToggleDone: handleToggleNodeDone,
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode,
+            onAddNodeAfter: handleAddNodeAfter, // Still pass itself for recursion if needed
+            onGenerateSubRoadmap: handleGenerateSubRoadmap, 
+            onManualToggleExpansion: handleManualToggleExpansion,
+            onUpdateNodeColor: handleUpdateNodeColor,
+            color: DEFAULT_NODE_COLOR,
+            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : true, 
+        },
+        draggable: true,
+        selectable: true,
+    };
+
+    const newNodesArray = [...nodes];
+    const newEdgesArray = [...edges];
+
+    newNodesArray.splice(currentNodeIndex + 1, 0, newNode);
+
+    const outgoingEdgeIndex = newEdgesArray.findIndex(edge => edge.source === currentNodeId);
+    if (outgoingEdgeIndex !== -1) {
+        const originalSuccessorId = newEdgesArray[outgoingEdgeIndex].target;
+        newEdgesArray.splice(outgoingEdgeIndex, 1); 
+
+        newEdgesArray.push({ 
+            id: `e-${newNode.id}-${originalSuccessorId}`,
+            source: newNode.id,
+            target: originalSuccessorId,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+            style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+        });
+    }
+
+    newEdgesArray.push({ 
+        id: `e-${currentNodeId}-${newNode.id}`,
+        source: currentNodeId,
+        target: newNode.id,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+        style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+    });
+    
+    setNodes(newNodesArray);
+    setEdges(newEdgesArray);
+
+    toast({ title: "New step added!" });
+    setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
+
+  }, [
+      isLoading, isLoadingSubRoadmapForNodeId, nodes, edges, nodeIdCounter, promptText,
+      handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
+      globalExpansionOverride, handleManualToggleExpansion, 
+      handleUpdateNodeColor, setNodes, setEdges, toast, reactFlowInstance
+      // Removed handleGenerateSubRoadmap from here
+    ]);
+
+
   const handleGenerateSubRoadmap = useCallback(async (parentNodeId: string) => {
     if (isLoading || isLoadingSubRoadmapForNodeId) return;
 
@@ -231,7 +316,7 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
             onAddNodeAfter: handleAddNodeAfter,
-            onGenerateSubRoadmap: handleGenerateSubRoadmap,
+            onGenerateSubRoadmap: handleGenerateSubRoadmap, // Still pass itself
             onManualToggleExpansion: handleManualToggleExpansion,
             onUpdateNodeColor: handleUpdateNodeColor,
             color: SUB_NODE_COLOR,
@@ -319,94 +404,11 @@ function FlowCanvas() {
     }
   }, [
     nodes, edges, nodeIdCounter, promptText, 
-    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, 
+    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
     handleManualToggleExpansion, handleUpdateNodeColor, 
     toast, reactFlowInstance, isLoading, isLoadingSubRoadmapForNodeId
+    // Removed handleAddNodeAfter from here
   ]);
-
-
-  const handleAddNodeAfter = useCallback((currentNodeId: string) => {
-    if (isLoading || isLoadingSubRoadmapForNodeId) return;
-
-    const newInternalId = `manualnode_${nodeIdCounter}`;
-    setNodeIdCounter(prev => prev + 1);
-
-    const currentNodeIndex = nodes.findIndex(n => n.id === currentNodeId);
-    const currentNode = nodes[currentNodeIndex];
-
-    if (!currentNode) {
-        toast({ title: "Error", description: "Could not find the current node to add after.", variant: "destructive"});
-        return;
-    }
-    
-    const newNodePosition = {
-        x: currentNode.position.x + 0, 
-        y: currentNode.position.y + (currentNode.height || 150) + 60,
-    };
-
-    const newNode: Node<WordNodeData> = {
-        id: newInternalId,
-        type: 'wordNode',
-        position: newNodePosition,
-        data: {
-            title: 'New Step',
-            description: 'Double-click description to edit.',
-            isDone: false,
-            onToggleDone: handleToggleNodeDone,
-            onUpdateNodeData: handleUpdateNodeData,
-            onDeleteNode: handleDeleteNode,
-            onAddNodeAfter: handleAddNodeAfter,
-            onGenerateSubRoadmap: handleGenerateSubRoadmap, 
-            onManualToggleExpansion: handleManualToggleExpansion,
-            onUpdateNodeColor: handleUpdateNodeColor,
-            color: DEFAULT_NODE_COLOR,
-            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : true, 
-        },
-        draggable: true,
-        selectable: true,
-    };
-
-    const newNodesArray = [...nodes];
-    const newEdgesArray = [...edges];
-
-    newNodesArray.splice(currentNodeIndex + 1, 0, newNode);
-
-    const outgoingEdgeIndex = newEdgesArray.findIndex(edge => edge.source === currentNodeId);
-    if (outgoingEdgeIndex !== -1) {
-        const originalSuccessorId = newEdgesArray[outgoingEdgeIndex].target;
-        newEdgesArray.splice(outgoingEdgeIndex, 1); 
-
-        newEdgesArray.push({ 
-            id: `e-${newNode.id}-${originalSuccessorId}`,
-            source: newNode.id,
-            target: originalSuccessorId,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-            style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
-        });
-    }
-
-    newEdgesArray.push({ 
-        id: `e-${currentNodeId}-${newNode.id}`,
-        source: currentNodeId,
-        target: newNode.id,
-        animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-        style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
-    });
-    
-    setNodes(newNodesArray);
-    setEdges(newEdgesArray);
-
-    toast({ title: "New step added!" });
-    setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
-
-  }, [
-      isLoading, isLoadingSubRoadmapForNodeId, nodes, edges, nodeIdCounter, 
-      handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
-      handleGenerateSubRoadmap, globalExpansionOverride, handleManualToggleExpansion, 
-      handleUpdateNodeColor, setNodes, setEdges, toast, reactFlowInstance
-    ]);
 
 
   const handleDeleteSelectedNodes = useCallback(() => {
@@ -720,3 +722,4 @@ export default function ProjectPage() {
     </ReactFlowProvider>
   );
 }
+
