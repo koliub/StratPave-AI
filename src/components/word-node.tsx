@@ -21,13 +21,19 @@ export type WordNodeData = {
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
   onAddNodeAfter?: (id: string) => void;
-  _isExpandedOverride?: boolean; // Controlled from parent for global actions
-  onManualToggleExpansion?: (id: string) => void; // Callback for manual toggle by user
+  _isExpandedOverride?: boolean; 
+  onManualToggleExpansion?: (id: string, explicitlyExpanded?: boolean) => void; 
+  color?: string; // Added color prop
+  onUpdateNodeColor?: (id: string, color: string) => void; // Added onUpdateNodeColor prop
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
-  const [isInternallyExpanded, setIsInternallyExpanded] = useState(true); // Node's own preference
-
+  const [isInternallyExpanded, setIsInternallyExpanded] = useState(() => {
+    if (data._isExpandedOverride !== undefined) {
+      return data._isExpandedOverride;
+    }
+    return !!data.description; // Default to expanded if description exists and no override
+  });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(data.title);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -38,19 +44,25 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const hasDescription = !!data.description && !data.isLoading;
 
-  // Effective expansion state: global override takes precedence, then internal state.
-  const isEffectivelyExpanded = data._isExpandedOverride !== undefined 
-    ? data._isExpandedOverride 
-    : isInternallyExpanded;
+  // This effect ensures that if the parent changes _isExpandedOverride, the internal state reflects it.
+  useEffect(() => {
+    if (data._isExpandedOverride !== undefined) {
+      setIsInternallyExpanded(data._isExpandedOverride);
+    }
+  }, [data._isExpandedOverride]);
+  
+  const isEffectivelyExpanded = hasDescription ? isInternallyExpanded : false;
+
 
   const toggleExpansion = () => {
-    // Signal parent that a manual toggle occurred for this node.
-    // Parent might then clear global overrides and allow this node's internal state to take effect.
     if (data.onManualToggleExpansion) {
-      data.onManualToggleExpansion(id);
+      // Pass the *new* desired state (current state inverted)
+      data.onManualToggleExpansion(id, !isInternallyExpanded);
     }
-    // Always toggle the internal preference. It will be used if _isExpandedOverride becomes undefined.
-    setIsInternallyExpanded(prevExpanded => !prevExpanded);
+    // The useEffect above will handle setting isInternallyExpanded if _isExpandedOverride changes
+    // Or, if onManualToggleExpansion directly updates _isExpandedOverride which then flows down.
+    // For immediate visual feedback if parent doesn't update _isExpandedOverride instantly:
+    // setIsInternallyExpanded(prev => !prev); // This might be redundant if useEffect handles it
   };
 
 
@@ -83,16 +95,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
-      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
+      data.onUpdateNodeData(id, { title: editedTitle, description: data.description }); // Keep current description
     } else {
-      setEditedTitle(data.title);
+      setEditedTitle(data.title); // Revert if empty
     }
     setIsEditingTitle(false);
   };
 
   const handleDescriptionSave = () => {
     if (data.onUpdateNodeData) {
-      data.onUpdateNodeData(id, { title: editedTitle, description: editedDescription });
+      data.onUpdateNodeData(id, { title: data.title, description: editedDescription }); // Keep current title
     }
     setIsEditingDescription(false);
   };
@@ -127,23 +139,31 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   };
 
+  const cardStyle = data.color && !data.isDone ? { borderColor: data.color, borderWidth: '1px' } : {};
+  const doneStyle = data.isDone && !data.isLoading ? { borderColor: 'hsl(var(--success))', borderWidth: '2px'} : {};
+  const selectedStyle = selected && !data.isLoading ? 
+    (data.isDone ? { ring: '2px', ringColor: 'hsl(var(--success))', outline: '2px solid hsl(var(--success))', outlineOffset: '2px'} 
+                  : { ring: '2px', ringColor: 'hsl(var(--primary))', outline: '2px solid hsl(var(--primary))', outlineOffset: '2px' }) 
+    : {};
+
+
   return (
     <Card
       className={cn(
         "w-64 shadow-xl transition-all duration-300 group relative",
-        'bg-card text-card-foreground', 
-        data.isLoading && 'opacity-70', 
-        data.isDone && !data.isLoading && 'opacity-70 border-2 border-[hsl(var(--success))]', 
-        !data.isDone && !data.isLoading && 'border-border', 
-        selected && !data.isLoading && !data.isDone && 'ring-2 ring-ring ring-offset-background',
-        selected && !data.isLoading && data.isDone && 'ring-2 ring-[hsl(var(--success))] ring-offset-background',
+        'bg-card text-card-foreground',
+        data.isLoading && 'opacity-70',
+        data.isDone && !data.isLoading && 'opacity-70 border-2 border-success', // Ensure success border is used
+        selected && !data.isLoading && !data.isDone && 'ring-2 ring-primary ring-offset-0', 
+        selected && !data.isLoading && data.isDone && 'ring-2 ring-success ring-offset-0', 
       )}
+      style={{...cardStyle, ...doneStyle, ...selectedStyle.ring && {outline: `${selectedStyle.ring} solid ${selectedStyle.ringColor}`, outlineOffset: '1px'}}}
       aria-label={`Roadmap step: ${data.title}`}
       aria-checked={data.isDone}
       aria-expanded={hasDescription ? isEffectivelyExpanded : undefined}
     >
       {selected && !data.isLoading && (data.onDeleteNode || data.onAddNodeAfter) && (
-        <div className="absolute -top-2 -right-10 z-10 flex flex-col space-y-1">
+        <div className="absolute -top-3 -right-11 z-10 flex flex-col space-y-1">
           {data.onDeleteNode && (
             <Button
               variant="ghost"
@@ -170,7 +190,9 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
           )}
         </div>
       )}
-      <CardHeader className="p-3 pb-2">
+      <CardHeader 
+        className="p-3 pb-2" 
+      >
         <div className="flex items-start justify-between">
           <div className="flex items-center flex-grow min-w-0">
             {!data.isLoading && data.onToggleDone && (
@@ -198,12 +220,12 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                   onChange={(e) => setEditedTitle(e.target.value)}
                   onBlur={handleTitleSave}
                   onKeyDown={handleTitleKeyDown}
-                  className="text-base font-semibold h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 m-0 bg-transparent"
+                  className="text-base font-semibold h-auto p-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 m-0 bg-transparent text-card-foreground"
                   aria-label="Edit title input"
                 />
               ) : (
                 <CardTitle className={cn(
-                  "text-base font-semibold break-words cursor-pointer relative",
+                  "text-base font-semibold break-words cursor-pointer relative text-card-foreground",
                    data.isDone && "line-through text-muted-foreground"
                 )}>
                   {data.isLoading ? 'Generating...' : data.title || 'Untitled Step'}
@@ -212,13 +234,13 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
             </div>
           </div>
           <div className="flex items-center shrink-0 pl-1">
-            {data.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {data.isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground"/>}
             {!isEditingTitle && hasDescription && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleExpansion}
-                className="h-6 w-6"
+                className="h-6 w-6 text-muted-foreground"
                 aria-label={isEffectivelyExpanded ? 'Collapse description' : 'Expand description'}
                 title={isEffectivelyExpanded ? 'Collapse description' : 'Expand description'}
               >
@@ -234,7 +256,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
         </div>
       </CardHeader>
       {hasDescription && isEffectivelyExpanded && (
-        <CardContent className="p-3 pt-0" onDoubleClick={() => !data.isLoading && !data.isDone && setIsEditingDescription(true)}>
+        <CardContent className="p-3 pt-0 text-card-foreground" onDoubleClick={() => !data.isLoading && !data.isDone && setIsEditingDescription(true)}>
           {isEditingDescription && !data.isLoading ? (
             <div className="relative">
               <Textarea
@@ -243,7 +265,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
                 onChange={(e) => setEditedDescription(e.target.value)}
                 onBlur={handleDescriptionSave}
                 onKeyDown={handleDescriptionKeyDown}
-                className="text-xs min-h-[60px] focus-visible:ring-1 bg-transparent"
+                className="text-xs min-h-[60px] focus-visible:ring-1 bg-transparent text-card-foreground"
                 rows={3}
                 aria-label="Edit description textarea"
               />
@@ -253,8 +275,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
             </div>
           ) : (
             <CardDescription className={cn(
-              "text-xs break-words cursor-pointer relative min-h-[2em]",
-              data.isDone && "text-muted-foreground opacity-80"
+              "text-xs break-words cursor-pointer relative min-h-[2em] text-muted-foreground",
+              data.isDone && "opacity-80"
             )}>
               {editedDescription || (data.isDone && !data.description ? "" : "Double-click to add description")}
             </CardDescription>
