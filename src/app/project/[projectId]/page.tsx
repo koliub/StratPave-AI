@@ -134,10 +134,15 @@ function FlowCanvas() {
           let newOverrideState: boolean | undefined = node.data._isExpandedOverride; 
 
           if (globalExpansionOverride === null) { 
+            // If global override is not active, automatically collapse when done (if it has description)
+            // and expand when un-done (if it has description).
             if (newIsDone && node.data.description) { 
               newOverrideState = false; 
+            } else if (!newIsDone && node.data.description) {
+              newOverrideState = true;
             }
           } else { 
+             // If global override is active, respect it
              newOverrideState = globalExpansionOverride;
           }
 
@@ -180,6 +185,161 @@ function FlowCanvas() {
     [setNodes, toast]
   );
 
+ const handleGenerateSubRoadmap = useCallback(async (parentNodeId: string) => {
+    // For debugging "Parent node not found" issues:
+    // console.log("HGS: Attempting to find parentNodeId:", parentNodeId);
+    // console.log("HGS: Current nodes count:", nodes.length);
+    // console.log("HGS: All node IDs currently in state:", nodes.map(n => n.id));
+    // console.log("HGS: isLoading:", isLoading, "isLoadingSubRoadmapForNodeId:", isLoadingSubRoadmapForNodeId);
+
+
+    if (isLoading || isLoadingSubRoadmapForNodeId) return;
+
+    const parentNode = nodes.find(n => n.id === parentNodeId);
+    if (!parentNode) {
+      // console.error("HGS: Parent node NOT found with ID:", parentNodeId);
+      toast({ title: "Error", description: "Parent node not found. Please ensure the main roadmap is loaded.", variant: "destructive" });
+      setIsLoadingSubRoadmapForNodeId(null); // Reset loading state if parent not found
+      return;
+    }
+    // console.log("HGS: Parent node found:", parentNode.id, parentNode.data.title);
+
+    if (!promptText.trim()) {
+       toast({ title: "Error", description: "Main project prompt is missing. Please enter it at the top.", variant: "destructive" });
+      return;
+    }
+
+    setIsLoadingSubRoadmapForNodeId(parentNodeId);
+    toast({ title: "Generating Sub-Roadmap...", description: `Breaking down step: "${parentNode.data.title}"` });
+
+    try {
+      const result = await generateSubRoadmap({
+        mainProjectPrompt: promptText,
+        parentStepTitle: parentNode.data.title,
+        parentStepDescription: parentNode.data.description,
+      });
+
+      if (!result.subRoadmap || result.subRoadmap.length === 0) {
+        toast({
+          title: 'No Sub-Roadmap Generated',
+          description: 'The AI did not return any sub-steps. Try a different parent step or refine the main prompt.',
+        });
+        setIsLoadingSubRoadmapForNodeId(null);
+        return;
+      }
+
+      const parentNodeIndex = nodes.findIndex(n => n.id === parentNodeId);
+      const newSubNodes: Node<WordNodeData>[] = result.subRoadmap.map((step, index) => {
+        const newId = `subnode_${parentNodeId}_${step.id.replace(/\s+/g, '_').toLowerCase()}_${nodeIdCounter + index}`;
+        return {
+          id: newId,
+          type: 'wordNode',
+          position: { 
+            x: parentNode.position.x + 30, // Indent sub-nodes
+            y: parentNode.position.y + (parentNode.height || 150) + 70 + (index * 100) // Stack vertically
+          },
+          data: {
+            title: `Sub: ${step.title}`,
+            description: step.description,
+            isDone: false,
+            isSubStep: true, // Mark as sub-step
+            onToggleDone: handleToggleNodeDone,
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode,
+            // onAddNodeAfter: handleAddNodeAfter, // Sub-nodes likely won't add further nodes "after" in the same way
+            // onGenerateSubRoadmap: handleGenerateSubRoadmap, // Sub-nodes won't generate further sub-roadmaps
+            onManualToggleExpansion: handleManualToggleExpansion,
+            onUpdateNodeColor: handleUpdateNodeColor,
+            color: SUB_NODE_COLOR,
+            _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : (!!step.description),
+          },
+          draggable: true,
+          selectable: true,
+          zIndex: (parentNode.zIndex || 0) + 1, // Ensure sub-nodes are visually distinct if overlapping
+        };
+      });
+      
+      setNodeIdCounter(prev => prev + result.subRoadmap.length);
+
+      let newEdgesArray = [...edges];
+      const originalOutgoingEdge = newEdgesArray.find(edge => edge.source === parentNodeId);
+      const originalSuccessorId = originalOutgoingEdge?.target;
+
+      if (originalOutgoingEdge) {
+        newEdgesArray = newEdgesArray.filter(edge => edge.id !== originalOutgoingEdge.id);
+      }
+
+      newEdgesArray.push({
+        id: `e-${parentNodeId}-${newSubNodes[0].id}`,
+        source: parentNodeId,
+        target: newSubNodes[0].id,
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+        style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+      });
+
+      for (let i = 0; i < newSubNodes.length - 1; i++) {
+        newEdgesArray.push({
+          id: `e-${newSubNodes[i].id}-${newSubNodes[i+1].id}`,
+          source: newSubNodes[i].id,
+          target: newSubNodes[i+1].id,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+        });
+      }
+
+      if (originalSuccessorId) {
+        newEdgesArray.push({
+          id: `e-${newSubNodes[newSubNodes.length - 1].id}-${originalSuccessorId}`,
+          source: newSubNodes[newSubNodes.length - 1].id,
+          target: originalSuccessorId,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
+          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
+        });
+      }
+      
+      const updatedNodes = [
+        ...nodes.slice(0, parentNodeIndex + 1),
+        ...newSubNodes,
+        ...nodes.slice(parentNodeIndex + 1)
+      ].map(n => ({...n, selected: false })); // Deselect all nodes
+
+      setNodes(updatedNodes);
+      setEdges(newEdgesArray);
+
+      toast({
+        title: 'Sub-Roadmap Generated!',
+        description: `Added ${newSubNodes.length} sub-steps for "${parentNode.data.title}".`,
+      });
+      // Expand the parent node if it has a description and isn't globally collapsed
+      if (parentNode.data.description && (globalExpansionOverride === null || globalExpansionOverride === true)) {
+        handleManualToggleExpansion(parentNodeId, true);
+      }
+      setTimeout(() => reactFlowInstance.fitView({ duration: 500, padding: 0.3 }), 100);
+
+    } catch (error) {
+      console.error('Sub-roadmap generation error:', error);
+      let errorMessage = 'Failed to generate sub-roadmap. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast({
+        title: 'Error Generating Sub-Roadmap',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSubRoadmapForNodeId(null);
+    }
+  }, [
+    nodes, edges, nodeIdCounter, promptText, globalExpansionOverride,
+    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
+    handleManualToggleExpansion, handleUpdateNodeColor, 
+    toast, reactFlowInstance, isLoading, isLoadingSubRoadmapForNodeId, setNodes, setEdges
+  ]);
+
   const handleAddNodeAfter = useCallback((currentNodeId: string) => {
     if (isLoading || isLoadingSubRoadmapForNodeId) return;
 
@@ -210,7 +370,7 @@ function FlowCanvas() {
             onToggleDone: handleToggleNodeDone,
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
-            onAddNodeAfter: handleAddNodeAfter, // Still pass itself for recursion if needed
+            onAddNodeAfter: handleAddNodeAfter,
             onGenerateSubRoadmap: handleGenerateSubRoadmap, 
             onManualToggleExpansion: handleManualToggleExpansion,
             onUpdateNodeColor: handleUpdateNodeColor,
@@ -250,165 +410,21 @@ function FlowCanvas() {
         style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
     });
     
-    setNodes(newNodesArray);
+    setNodes(newNodesArray.map(n => ({...n, selected: false}))); // Deselect all
     setEdges(newEdgesArray);
 
     toast({ title: "New step added!" });
-    setTimeout(() => reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.2}), 100);
+    setTimeout(() => {
+        reactFlowInstance.fitView({nodes: [{id: newNode.id}], duration: 300, padding: 0.3});
+        setNodes(prevNodes => prevNodes.map(n => n.id === newNode.id ? {...n, selected: true} : n)); // Select new node
+    }, 100);
 
   }, [
-      isLoading, isLoadingSubRoadmapForNodeId, nodes, edges, nodeIdCounter, promptText,
+      isLoading, isLoadingSubRoadmapForNodeId, nodes, edges, nodeIdCounter, 
       handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
-      globalExpansionOverride, handleManualToggleExpansion, 
+      globalExpansionOverride, handleManualToggleExpansion, handleGenerateSubRoadmap,
       handleUpdateNodeColor, setNodes, setEdges, toast, reactFlowInstance
-      // Removed handleGenerateSubRoadmap from here
     ]);
-
-
-  const handleGenerateSubRoadmap = useCallback(async (parentNodeId: string) => {
-    if (isLoading || isLoadingSubRoadmapForNodeId) return;
-
-    const parentNode = nodes.find(n => n.id === parentNodeId);
-    if (!parentNode) {
-      toast({ title: "Error", description: "Parent node not found.", variant: "destructive" });
-      return;
-    }
-    if (!promptText.trim()) {
-       toast({ title: "Error", description: "Main project prompt is missing. Please enter it at the top.", variant: "destructive" });
-      return;
-    }
-
-    setIsLoadingSubRoadmapForNodeId(parentNodeId);
-    toast({ title: "Generating Sub-Roadmap...", description: `Breaking down step: "${parentNode.data.title}"` });
-
-    try {
-      const result = await generateSubRoadmap({
-        mainProjectPrompt: promptText,
-        parentStepTitle: parentNode.data.title,
-        parentStepDescription: parentNode.data.description,
-      });
-
-      if (!result.subRoadmap || result.subRoadmap.length === 0) {
-        toast({
-          title: 'No Sub-Roadmap Generated',
-          description: 'The AI did not return any sub-steps. Try a different parent step or refine the main prompt.',
-        });
-        setIsLoadingSubRoadmapForNodeId(null);
-        return;
-      }
-
-      const parentNodeIndex = nodes.findIndex(n => n.id === parentNodeId);
-      const newSubNodes: Node<WordNodeData>[] = result.subRoadmap.map((step, index) => {
-        const newId = `subnode_${parentNodeId}_${step.id}_${nodeIdCounter + index}`;
-        return {
-          id: newId,
-          type: 'wordNode',
-          position: { 
-            x: parentNode.position.x + 30, // Indent sub-nodes
-            y: parentNode.position.y + (parentNode.height || 150) + 70 + (index * 100) // Stack vertically
-          },
-          data: {
-            title: `Sub: ${step.title}`,
-            description: step.description,
-            isDone: false,
-            isSubStep: true, // Mark as sub-step
-            onToggleDone: handleToggleNodeDone,
-            onUpdateNodeData: handleUpdateNodeData,
-            onDeleteNode: handleDeleteNode,
-            onAddNodeAfter: handleAddNodeAfter,
-            onGenerateSubRoadmap: handleGenerateSubRoadmap, // Still pass itself
-            onManualToggleExpansion: handleManualToggleExpansion,
-            onUpdateNodeColor: handleUpdateNodeColor,
-            color: SUB_NODE_COLOR,
-            _isExpandedOverride: !!step.description,
-          },
-          draggable: true,
-          selectable: true,
-        };
-      });
-      
-      setNodeIdCounter(prev => prev + result.subRoadmap.length);
-
-      let newEdgesArray = [...edges];
-      const originalOutgoingEdge = newEdgesArray.find(edge => edge.source === parentNodeId);
-      const originalSuccessorId = originalOutgoingEdge?.target;
-
-      // Remove original outgoing edge from parent
-      if (originalOutgoingEdge) {
-        newEdgesArray = newEdgesArray.filter(edge => edge.id !== originalOutgoingEdge.id);
-      }
-
-      // Connect parent to first sub-node
-      newEdgesArray.push({
-        id: `e-${parentNodeId}-${newSubNodes[0].id}`,
-        source: parentNodeId,
-        target: newSubNodes[0].id,
-        animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
-        style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
-      });
-
-      // Connect sub-nodes sequentially
-      for (let i = 0; i < newSubNodes.length - 1; i++) {
-        newEdgesArray.push({
-          id: `e-${newSubNodes[i].id}-${newSubNodes[i+1].id}`,
-          source: newSubNodes[i].id,
-          target: newSubNodes[i+1].id,
-          animated: true,
-          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
-          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
-        });
-      }
-
-      // Connect last sub-node to original successor (if any)
-      if (originalSuccessorId) {
-        newEdgesArray.push({
-          id: `e-${newSubNodes[newSubNodes.length - 1].id}-${originalSuccessorId}`,
-          source: newSubNodes[newSubNodes.length - 1].id,
-          target: originalSuccessorId,
-          animated: true,
-          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: 'hsl(var(--accent))' },
-          style: { strokeWidth: 1.5, stroke: 'hsl(var(--accent))' },
-        });
-      }
-      
-      // Insert new nodes into the nodes array
-      const updatedNodes = [
-        ...nodes.slice(0, parentNodeIndex + 1),
-        ...newSubNodes,
-        ...nodes.slice(parentNodeIndex + 1)
-      ];
-
-      setNodes(updatedNodes);
-      setEdges(newEdgesArray);
-
-      toast({
-        title: 'Sub-Roadmap Generated!',
-        description: `Added ${newSubNodes.length} sub-steps for "${parentNode.data.title}".`,
-      });
-      setTimeout(() => reactFlowInstance.fitView({ duration: 500, padding: 0.2 }), 100);
-
-    } catch (error) {
-      console.error('Sub-roadmap generation error:', error);
-      let errorMessage = 'Failed to generate sub-roadmap. Please try again.';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      toast({
-        title: 'Error Generating Sub-Roadmap',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoadingSubRoadmapForNodeId(null);
-    }
-  }, [
-    nodes, edges, nodeIdCounter, promptText, 
-    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
-    handleManualToggleExpansion, handleUpdateNodeColor, 
-    toast, reactFlowInstance, isLoading, isLoadingSubRoadmapForNodeId
-    // Removed handleAddNodeAfter from here
-  ]);
 
 
   const handleDeleteSelectedNodes = useCallback(() => {
@@ -427,11 +443,13 @@ function FlowCanvas() {
       if (event.key === 'Delete' || (event.key === 'x' && (event.ctrlKey || event.metaKey))) {
         const activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
-            return; 
-          }
+          // if (event.key === 'x' && (event.ctrlKey || event.metaKey)) { // Allow cut in input/textarea
+          //   return; 
+          // }
+           // For 'Delete' key, if we are in an input/textarea, let the default action happen
+          if (event.key === 'Delete') return;
         }
-        if (event.key === 'x' && (event.ctrlKey || event.metaKey)) {
+        if (event.key === 'x' && (event.ctrlKey || event.metaKey)) { // Prevent browser default cut for 'x'
             event.preventDefault();
         }
         handleDeleteSelectedNodes();
@@ -502,7 +520,7 @@ function FlowCanvas() {
         const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
 
         return {
-          id: `roadmapnode_${step.id}_${nodeIdCounter + index}`, 
+          id: `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${nodeIdCounter + index}`, 
           type: 'wordNode',
           position: { x: xPosition, y: yPosition },
           data: { 
@@ -588,8 +606,11 @@ function FlowCanvas() {
         generationAttempted.current = true;
       }
     } else if (projectId !== 'new' && initialPromptFromQuery) {
+        // If it's an existing project ID but we have a prompt, just set the prompt text
+        // but don't auto-generate. The user might want to load saved data later (not yet implemented)
+        // or regenerate manually.
         setPromptText(initialPromptFromQuery); 
-        generationAttempted.current = false; 
+        generationAttempted.current = false; // Allow manual generation or future load
     }
   }, [projectId, searchParams, doGenerateRoadmap, nodes.length, isLoading]);
 
@@ -602,7 +623,10 @@ function FlowCanvas() {
         selected: n.id === nodeId,
       }))
     );
-    reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
+    const nodeToFocus = nodes.find(n => n.id === nodeId);
+    if (nodeToFocus) {
+        reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
+    }
   };
 
   const handleExpandAllNodes = () => {
@@ -619,11 +643,11 @@ function FlowCanvas() {
     if (globalExpansionOverride !== null) {
       setNodes(nds => nds.map(n => {
         if (n.data.isLoading) return n; 
-        if (!n.data.description) return { ...n, data: { ...n.data, _isExpandedOverride: false } };
+        if (!n.data.description) return { ...n, data: { ...n.data, _isExpandedOverride: false } }; // Ensure no-description nodes are collapsed
         return { ...n, data: { ...n.data, _isExpandedOverride: globalExpansionOverride } };
       }));
     }
-  }, [globalExpansionOverride, nodes.length, setNodes]); 
+  }, [globalExpansionOverride, nodes.length, setNodes]); // nodes.length to re-apply if nodes change
 
 
   return (
@@ -655,7 +679,7 @@ function FlowCanvas() {
             />
             <Button onClick={() => doGenerateRoadmap()} disabled={isLoading || !!isLoadingSubRoadmapForNodeId} className="w-full sm:w-auto shrink-0 px-4 h-10">
               {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
-              {isLoading ? 'Generating...' : (nodes.length > 0 ? 'Regenerate' : 'Generate Roadmap')}
+              {isLoading ? 'Generating...' : (nodes.length > 0 && projectId === 'new' ? 'Regenerate' : 'Generate Roadmap')}
             </Button>
             <div className="sm:ml-auto flex items-center gap-1 self-center sm:self-auto mt-2 sm:mt-0">
               <Button 
@@ -704,9 +728,12 @@ function FlowCanvas() {
             nodeTypes={nodeTypes}
             isMiniMapVisible={isMiniMapVisible}
           />
-           {isLoadingSubRoadmapForNodeId && (
+           {isLoadingSubRoadmapForNodeId && ( // Global overlay for sub-roadmap loading
             <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-20">
-              <Loader2 className="h-12 w-12 animate-spin text-accent" />
+              <div className="p-4 bg-card rounded-lg shadow-xl flex items-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                <span className="text-card-foreground">Generating sub-steps...</span>
+              </div>
             </div>
           )}
         </main>
