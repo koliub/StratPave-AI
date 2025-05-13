@@ -1,124 +1,312 @@
 
 "use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import Link from 'next/link';
-import { ArrowRight, FilePlus2, ListChecks } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  type Node,
+  type Edge,
+  ReactFlowProvider,
+  useReactFlow,
+  MarkerType,
+  type NodeTypes,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { useSearchParams, useParams } from 'next/navigation';
 
-// Mock project data for now
-const mockProjects = [
-  { id: 'apple-farm', name: 'Build an Apple Tree Farm', lastModified: '2 days ago', description: 'Plan and execute the creation of a thriving apple orchard.' },
-  { id: 'community-garden', name: 'Start a Community Garden', lastModified: '5 days ago', description: 'Bring the neighborhood together with a shared green space.' },
-  { id: 'learn-coding', name: 'Learn to Code in 6 Months', lastModified: '1 week ago', description: 'A structured plan to acquire programming skills.' },
-  { id: 'saas-product-launch', name: 'Launch New SaaS Product', lastModified: '3 days ago', description: 'Roadmap for developing and marketing a new software-as-a-service.'}
-];
+import { WordNode, type WordNodeData } from '@/components/word-node';
+import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
+import { useToast } from '@/hooks/use-toast';
+import {
+  SidebarProvider,
+  SidebarInset,
+} from '@/components/ui/sidebar';
 
+import { RoadmapSidebar } from '@/components/roadmap/RoadmapSidebar';
+import { RoadmapCanvas } from '@/components/roadmap/RoadmapCanvas';
+import { ProjectHeader } from '@/components/roadmap/ProjectHeader';
+import { useNodeManagement } from '@/hooks/useNodeManagement';
 
-export default function HomePage() {
-  const [prompt, setPrompt] = useState('');
-  const router = useRouter();
+const nodeTypes: NodeTypes = {
+  wordNode: WordNode,
+};
 
-  const handleCreateProject = () => {
-    if (prompt.trim()) {
-      router.push(`/project/new?prompt=${encodeURIComponent(prompt.trim())}`);
+const DEFAULT_NODE_COLOR = '#A0A0A0';
+
+function FlowCanvas() {
+  const [promptText, setPromptText] = useState('');
+  const [isLoading, setIsLoading] = useState(false); 
+  const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
+  const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
+  const [isMiniMapVisible, setIsMiniMapVisible] = useState(true);
+  
+  const generationAttempted = useRef(false);
+  const { toast } = useToast();
+  const reactFlowInstance = useReactFlow();
+  const searchParams = useSearchParams(); 
+  const params = useParams(); 
+  const projectId = params.projectId as string;
+
+  const {
+    nodes,
+    setNodes, 
+    edges,
+    setEdges,
+    onNodesChange,
+    onEdgesChange,
+    nodeIdCounter, 
+    setNodeIdCounter,
+    handleUpdateNodeColor,
+    handleDeleteNode,
+    handleManualToggleExpansion,
+    handleToggleNodeDone,
+    handleUpdateNodeData,
+    handleAddNodeAfter,
+    handleGenerateSubRoadmapPrompt,
+  } = useNodeManagement({
+    isLoading: isLoading,
+    reactFlowInstance: reactFlowInstance,
+    globalExpansionOverride: globalExpansionOverride,
+    projectPrompt: promptText, // Pass promptText here
+  });
+
+  useEffect(() => {
+    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0) && !selectedNodeIdFromSidebar) {
+      const timer = setTimeout(() => {
+        reactFlowInstance.fitView({ duration: 300, padding: 0.2 });
+      }, 150); 
+      return () => clearTimeout(timer);
+    }
+  }, [nodes, edges, reactFlowInstance, selectedNodeIdFromSidebar]);
+
+  const doGenerateRoadmap = useCallback(async (currentPrompt?: string) => {
+    const promptToUse = typeof currentPrompt === 'string' ? currentPrompt : promptText;
+    if (!promptToUse.trim()) {
+      toast({
+        title: 'Prompt is empty',
+        description: 'Please enter your project idea to generate a roadmap.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setSelectedNodeIdFromSidebar(null); 
+    setGlobalExpansionOverride(null);
+    
+    let currentTempNodeIdCounter = nodeIdCounter;
+    const tempLoadingNodeId = `loading_node_${currentTempNodeIdCounter}`;
+    currentTempNodeIdCounter++;
+
+    const tempLoadingNode: Node<WordNodeData> = {
+      id: tempLoadingNodeId,
+      type: 'wordNode',
+      position: { x: 50, y: 50 }, 
+      data: {
+        title: 'Generating Roadmap...', 
+        isLoading: true, 
+        isDone: false,
+        onToggleDone: handleToggleNodeDone,
+        onUpdateNodeData: handleUpdateNodeData,
+        onDeleteNode: handleDeleteNode,
+        onAddNodeAfter: handleAddNodeAfter,
+        onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+        onManualToggleExpansion: handleManualToggleExpansion,
+        onUpdateNodeColor: handleUpdateNodeColor,
+      },
+      draggable: true,
+      selectable: true,
+    };
+    setNodes([tempLoadingNode]);
+    setEdges([]); 
+    setNodeIdCounter(currentTempNodeIdCounter);
+
+    try {
+      const result = await generateRoadmap({ prompt: promptToUse });
+      
+      if (!result.roadmap || result.roadmap.length === 0) {
+        toast({
+          title: 'No Roadmap Generated',
+          description: 'The AI did not return any roadmap steps. Try a different prompt.',
+          variant: 'default',
+        });
+        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId)); 
+        setEdges([]);
+        return;
+      }
+      
+      let newNodesCounter = nodeIdCounter;
+      const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
+        const currentNodesCount = index; 
+        const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50; 
+        const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
+        const nodeId = `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${newNodesCounter + index}`;
+        return {
+          id: nodeId,
+          type: 'wordNode',
+          position: { x: xPosition, y: yPosition },
+          data: { 
+            title: step.title, 
+            description: step.description, 
+            isLoading: false, 
+            isDone: false, 
+            onToggleDone: handleToggleNodeDone, 
+            onUpdateNodeData: handleUpdateNodeData,
+            onDeleteNode: handleDeleteNode, 
+            onAddNodeAfter: handleAddNodeAfter,
+            onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt, 
+            onManualToggleExpansion: handleManualToggleExpansion,
+            onUpdateNodeColor: handleUpdateNodeColor, 
+            color: DEFAULT_NODE_COLOR, 
+            _isExpandedOverride: !!step.description, 
+            depth: 0, // Add initial depth for main nodes
+          },
+          draggable: true,
+          selectable: true,
+        };
+      });
+      
+      const newEdgesFromAI: Edge[] = [];
+      if (newNodesFromAI.length > 1) {
+        for (let i = 0; i < newNodesFromAI.length - 1; i++) {
+          newEdgesFromAI.push({
+            id: `e-${newNodesFromAI[i].id}-${newNodesFromAI[i+1].id}`,
+            source: newNodesFromAI[i].id,
+            target: newNodesFromAI[i+1].id,
+            animated: true,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: 'hsl(var(--accent))',
+            },
+            style: {
+              strokeWidth: 2,
+              stroke: 'hsl(var(--accent))',
+            }
+          });
+        }
+      }
+      
+      setNodeIdCounter(newNodesCounter + result.roadmap.length);
+      setNodes(newNodesFromAI); 
+      setEdges(newEdgesFromAI);
+
+      toast({
+        title: 'Roadmap Generated!',
+        description: `Created ${newNodesFromAI.length} steps for your project.`,
+      });
+
+    } catch (error) {
+      console.error('Roadmap generation error:', error);
+      let errorMessage = 'Failed to generate roadmap. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message.includes("output was null") 
+          ? "AI failed to produce a valid roadmap structure. Try rephrasing your prompt." 
+          : error.message.includes("roadmap array is missing")
+          ? "AI output was invalid. Roadmap data is not correctly formatted."
+          : error.message;
+      }
+      toast({
+        title: 'Error Generating Roadmap',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
+      setEdges([]);
+    } finally {
+      setIsLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    promptText, toast, reactFlowInstance, 
+    nodeIdCounter, setNodeIdCounter,
+    setNodes, setEdges,
+    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
+    handleAddNodeAfter, handleManualToggleExpansion, handleUpdateNodeColor,
+    handleGenerateSubRoadmapPrompt
+  ]);
+
+  useEffect(() => {
+    const initialPromptFromQuery = searchParams.get('prompt');
+    if (projectId === 'new' && initialPromptFromQuery && !generationAttempted.current) {
+       if (nodes.length === 0 && !isLoading) {
+        setPromptText(initialPromptFromQuery);
+        doGenerateRoadmap(initialPromptFromQuery);
+        generationAttempted.current = true;
+      }
+    } else if (projectId !== 'new' && initialPromptFromQuery) {
+        setPromptText(initialPromptFromQuery); 
+        generationAttempted.current = false;
+    }
+  }, [projectId, searchParams, doGenerateRoadmap, nodes.length, isLoading]);
+
+  const handleNodeSelectFromSidebar = (nodeId: string) => {
+    setSelectedNodeIdFromSidebar(nodeId);
+    setNodes(nds => 
+      nds.map(n => ({
+        ...n,
+        selected: n.id === nodeId,
+      }))
+    );
+    const nodeToFocus = nodes.find(n => n.id === nodeId);
+    if (nodeToFocus && reactFlowInstance) {
+        reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
     }
   };
 
+  const handleExpandAllNodes = () => {
+    if (isLoading || nodes.length === 0) return;
+    setGlobalExpansionOverride(true);
+  };
+
+  const handleCollapseAllNodes = () => {
+    if (isLoading || nodes.length === 0) return;
+    setGlobalExpansionOverride(false);
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
-      <header className="p-4 border-b border-border shadow-sm sticky top-0 bg-background/80 backdrop-blur-md z-50">
-        <div className="container mx-auto flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-primary hover:opacity-80 transition-opacity">
-            <ListChecks className="h-7 w-7" />
-            <span>AI Roadmap Generator</span>
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+    <SidebarProvider>
+      <RoadmapSidebar 
+        nodes={nodes}
+        isLoading={isLoading}
+        selectedNodeIdFromSidebar={selectedNodeIdFromSidebar}
+        onNodeSelect={handleNodeSelectFromSidebar}
+      />
 
-      <main className="flex-grow container mx-auto p-4 md:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          {/* Prompt Input Section */}
-          <Card className="shadow-xl border-border hover:shadow-2xl transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="text-2xl flex items-center">
-                <FilePlus2 className="mr-3 h-7 w-7 text-accent" />
-                Create a New Roadmap
-              </CardTitle>
-              <CardDescription className="text-base">
-                Tell us your vision. Our AI will draft a strategic plan to get you there.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <Input
-                type="text"
-                placeholder="e.g., Develop a mobile app for local artists..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                className="text-lg py-6 px-4 rounded-md"
-                onKeyDown={(e) => { if (e.key === 'Enter' && prompt.trim()) handleCreateProject(); }}
-                aria-label="Project idea prompt"
-              />
-              <Button 
-                onClick={handleCreateProject} 
-                className="w-full py-6 text-lg font-semibold" 
-                size="lg" 
-                disabled={!prompt.trim()}
-              >
-                Generate Your Roadmap
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Saved Projects Section */}
-          <Card className="shadow-xl border-border hover:shadow-2xl transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="text-2xl">Your Projects</CardTitle>
-              <CardDescription className="text-base">
-                Revisit and continue working on your roadmaps. (Mock data)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {mockProjects.length > 0 ? (
-                <ul className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                  {mockProjects.map((project) => (
-                    <li key={project.id}>
-                      <Link href={`/project/${project.id}?prompt=${encodeURIComponent(project.name)}`} passHref> {/* Pass prompt for mock projects */}
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-between text-left h-auto p-4 group rounded-md border-border hover:border-accent transition-all"
-                          aria-label={`Open project: ${project.name}`}
-                        >
-                          <div className="flex-grow mr-4">
-                            <p className="font-semibold text-md text-card-foreground">{project.name}</p>
-                            <p className="text-sm text-muted-foreground truncate">{project.description}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Last modified: {project.lastModified}</p>
-                          </div>
-                          <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-accent transition-colors shrink-0" />
-                        </Button>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground text-center py-6 text-base">
-                  No projects saved yet. Start by generating a new roadmap!
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-
-      <footer className="text-center p-6 border-t border-border text-sm text-muted-foreground mt-8">
-        © {new Date().getFullYear()} AI Roadmap Generator. Powered by Next.js, Genkit, and love for planning.
-      </footer>
-    </div>
+      <SidebarInset className="flex flex-col h-screen">
+        <ProjectHeader 
+          promptText={promptText}
+          onPromptTextChange={setPromptText}
+          onGenerateRoadmap={() => doGenerateRoadmap()} 
+          isLoading={isLoading}
+          nodes={nodes}
+          projectId={projectId}
+          onExpandAll={handleExpandAllNodes}
+          onCollapseAll={handleCollapseAllNodes}
+          isMiniMapVisible={isMiniMapVisible}
+          onToggleMiniMap={() => setIsMiniMapVisible(!isMiniMapVisible)}
+        />
+        
+        <main className="flex-grow relative" aria-label="React Flow canvas area">
+          <RoadmapCanvas 
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            isMiniMapVisible={isMiniMapVisible}
+          />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
+
+export default function ProjectPage() {
+  return (
+    <ReactFlowProvider>
+      <FlowCanvas />
+    </ReactFlowProvider>
+  );
+}
+

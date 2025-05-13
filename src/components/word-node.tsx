@@ -27,6 +27,8 @@ export type WordNodeData = {
   onManualToggleExpansion?: (id: string, explicitlyExpanded?: boolean) => void; 
   color?: string;
   onUpdateNodeColor?: (id: string, color: string) => void;
+  depth?: number; // Added for hierarchical structure
+  parentId?: string; // Added for hierarchical structure
 };
 
 export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {

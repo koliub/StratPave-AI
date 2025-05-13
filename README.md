@@ -1,22 +1,25 @@
 # AI Roadmap Generator
 
-This is a Next.js application built with Firebase and Genkit that allows users to generate project roadmaps from natural language prompts. The generated roadmap is then visualized as an interactive flow chart.
+This is a Next.js application built with Genkit that allows users to generate project roadmaps and detailed sub-roadmaps from natural language prompts. The generated roadmaps are then visualized as interactive and editable flow charts.
 
 ## Key Features
 
-*   **AI-Powered Roadmap Generation:** Enter a project idea, and the AI will generate a structured, step-by-step roadmap.
-*   **Interactive Flowchart Visualization:** Roadmaps are displayed as an editable flow chart using React Flow.
+*   **AI-Powered Roadmap Generation:** Enter a project idea on the homepage, and the AI will generate a structured, step-by-step roadmap.
+*   **AI-Powered Sub-Roadmap Generation:** For any step in the main roadmap, generate a more detailed sub-roadmap (a series of smaller steps) with AI, considering the context of the main project goal.
+*   **Interactive Flowchart Visualization:** Roadmaps and sub-roadmaps are displayed as an editable flow chart using React Flow.
 *   **Node Management:**
-    *   Edit step titles and descriptions.
-    *   Mark steps as "done".
-    *   Add new steps after existing ones.
-    *   Delete steps.
-    *   Expand/collapse step descriptions.
-*   **Theming:** Supports light, dark, and system themes.
-*   **Responsive Sidebar:** A collapsible sidebar lists all roadmap steps for easy navigation and selection.
+    *   **Edit:** Double-click step titles and descriptions to edit them directly on the node.
+    *   **Mark as Done:** Toggle a step's completion status with a visual checkmark. Completed nodes are visually distinct and can auto-collapse.
+    *   **Add Steps:** Add new steps sequentially after an existing step using a dedicated button on selected nodes.
+    *   **Delete Steps:** Remove individual steps or multiple selected steps.
+    *   **Expand/Collapse Descriptions:** Manually toggle the visibility of step descriptions. Buttons to expand/collapse all descriptions globally are also available.
+*   **Theming:** Supports light, dark, and system themes, with a toggle for user preference.
+*   **Responsive Sidebar:** A collapsible sidebar lists all main roadmap steps, allowing for easy navigation and selection to focus the flowchart view.
+*   **Collapsible MiniMap:** A MiniMap for easy canvas navigation can be toggled on or off.
 *   **Keyboard Shortcuts:**
     *   `Delete` / `Ctrl+X` (`Cmd+X` on Mac) to delete selected node(s).
-*   **Toast Notifications:** Provides feedback for user actions.
+*   **Toast Notifications:** Provides clear feedback for user actions like generation, updates, and deletions.
+*   **Homepage:** A dedicated homepage to input the initial project prompt and (placeholder for) view existing projects.
 
 ## Tech Stack
 
@@ -24,9 +27,10 @@ This is a Next.js application built with Firebase and Genkit that allows users t
 *   **TypeScript:** For type safety and improved developer experience.
 *   **Tailwind CSS & ShadCN UI:** For styling and pre-built UI components.
 *   **React Flow:** For rendering interactive flowcharts.
-*   **Genkit (with Google AI):** For AI-powered roadmap generation.
+*   **Genkit (with Google AI):** For AI-powered roadmap and sub-roadmap generation.
 *   **Lucide Icons:** For UI icons.
 *   **Zod:** For schema validation.
+*   **React Hook Form:** (Implicitly used by ShadCN Form, good to note if complex forms are added).
 
 ## Getting Started
 
@@ -41,8 +45,6 @@ This is a Next.js application built with Firebase and Genkit that allows users t
 2.  **Install dependencies:**
     ```bash
     npm install
-    # or
-    # yarn install
     ```
 3.  **Set up Environment Variables:**
     Create a `.env` file in the root of your project and add your Google AI API key:
@@ -62,6 +64,7 @@ This is a Next.js application built with Firebase and Genkit that allows users t
     ```bash
     npm run genkit:watch
     ```
+    This typically starts the Genkit inspector on `http://localhost:4000`.
 
 2.  **Start the Next.js development server:**
     Open another terminal and run:
@@ -73,24 +76,29 @@ This is a Next.js application built with Firebase and Genkit that allows users t
 ## Project Structure
 
 *   `src/app/`: Contains the Next.js pages and layout.
-    *   `src/app/page.tsx`: The main page for the roadmap generator.
+    *   `src/app/page.tsx`: The homepage for inputting project prompts.
+    *   `src/app/project/[projectId]/page.tsx`: The page for displaying and interacting with a specific roadmap.
     *   `src/app/layout.tsx`: The root layout.
 *   `src/components/`: Contains reusable React components.
-    *   `src/components/ui/`: ShadCN UI components.
-    *   `src/components/word-node.tsx`: Custom React Flow node component.
+    *   `src/components/ui/`: ShadCN UI components (buttons, cards, dialogs, etc.).
+    *   `src/components/roadmap/`: Components specific to roadmap display and interaction (ProjectHeader, RoadmapCanvas, RoadmapSidebar).
+    *   `src/components/word-node.tsx`: Custom React Flow node component for roadmap steps.
     *   `src/components/theme-provider.tsx` & `src/components/theme-toggle.tsx`: Theme management.
 *   `src/ai/`: Contains Genkit AI related code.
-    *   `src/ai/genkit.ts`: Genkit configuration.
-    *   `src/ai/flows/generate-roadmap-flow.ts`: The Genkit flow for generating roadmaps.
-*   `src/lib/`: Utility functions.
+    *   `src/ai/genkit.ts`: Genkit global configuration.
+    *   `src/ai/flows/generate-roadmap-flow.ts`: The Genkit flow for generating main roadmaps and sub-roadmaps.
 *   `src/hooks/`: Custom React hooks.
+    *   `src/hooks/useNodeManagement.ts`: Core logic for managing React Flow nodes and edges (creation, deletion, updates, sub-roadmap logic).
+    *   `src/hooks/useToast.ts`: For displaying toast notifications.
+    *   `src/hooks/use-mobile.tsx`: For detecting mobile viewports (used by ShadCN Sidebar).
+*   `src/lib/`: Utility functions (e.g., `cn` for Tailwind class merging).
 *   `public/`: Static assets.
 
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-Please make sure to update tests as appropriate.
+Please make sure to update tests as appropriate (if applicable).
 
 ## License
 
