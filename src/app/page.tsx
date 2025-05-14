@@ -1,312 +1,171 @@
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Brain, Zap, Workflow, Layers, Code, ShieldCheck, Users, Eye, Edit } from 'lucide-react'; 
+import Image from 'next/image';
+import { ThemeToggle } from '@/components/theme-toggle';
 
-"use client";
-
-import { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  type Node,
-  type Edge,
-  ReactFlowProvider,
-  useReactFlow,
-  MarkerType,
-  type NodeTypes,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { useSearchParams, useParams } from 'next/navigation';
-
-import { WordNode, type WordNodeData } from '@/components/word-node';
-import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
-import { useToast } from '@/hooks/use-toast';
-import {
-  SidebarProvider,
-  SidebarInset,
-} from '@/components/ui/sidebar';
-
-import { RoadmapSidebar } from '@/components/roadmap/RoadmapSidebar';
-import { RoadmapCanvas } from '@/components/roadmap/RoadmapCanvas';
-import { ProjectHeader } from '@/components/roadmap/ProjectHeader';
-import { useNodeManagement } from '@/hooks/useNodeManagement';
-
-const nodeTypes: NodeTypes = {
-  wordNode: WordNode,
-};
-
-const DEFAULT_NODE_COLOR = '#A0A0A0';
-
-function FlowCanvas() {
-  const [promptText, setPromptText] = useState('');
-  const [isLoading, setIsLoading] = useState(false); 
-  const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
-  const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
-  const [isMiniMapVisible, setIsMiniMapVisible] = useState(true);
-  
-  const generationAttempted = useRef(false);
-  const { toast } = useToast();
-  const reactFlowInstance = useReactFlow();
-  const searchParams = useSearchParams(); 
-  const params = useParams(); 
-  const projectId = params.projectId as string;
-
-  const {
-    nodes,
-    setNodes, 
-    edges,
-    setEdges,
-    onNodesChange,
-    onEdgesChange,
-    nodeIdCounter, 
-    setNodeIdCounter,
-    handleUpdateNodeColor,
-    handleDeleteNode,
-    handleManualToggleExpansion,
-    handleToggleNodeDone,
-    handleUpdateNodeData,
-    handleAddNodeAfter,
-    handleGenerateSubRoadmapPrompt,
-  } = useNodeManagement({
-    isLoading: isLoading,
-    reactFlowInstance: reactFlowInstance,
-    globalExpansionOverride: globalExpansionOverride,
-    projectPrompt: promptText, // Pass promptText here
-  });
-
-  useEffect(() => {
-    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0) && !selectedNodeIdFromSidebar) {
-      const timer = setTimeout(() => {
-        reactFlowInstance.fitView({ duration: 300, padding: 0.2 });
-      }, 150); 
-      return () => clearTimeout(timer);
-    }
-  }, [nodes, edges, reactFlowInstance, selectedNodeIdFromSidebar]);
-
-  const doGenerateRoadmap = useCallback(async (currentPrompt?: string) => {
-    const promptToUse = typeof currentPrompt === 'string' ? currentPrompt : promptText;
-    if (!promptToUse.trim()) {
-      toast({
-        title: 'Prompt is empty',
-        description: 'Please enter your project idea to generate a roadmap.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    setSelectedNodeIdFromSidebar(null); 
-    setGlobalExpansionOverride(null);
-    
-    let currentTempNodeIdCounter = nodeIdCounter;
-    const tempLoadingNodeId = `loading_node_${currentTempNodeIdCounter}`;
-    currentTempNodeIdCounter++;
-
-    const tempLoadingNode: Node<WordNodeData> = {
-      id: tempLoadingNodeId,
-      type: 'wordNode',
-      position: { x: 50, y: 50 }, 
-      data: {
-        title: 'Generating Roadmap...', 
-        isLoading: true, 
-        isDone: false,
-        onToggleDone: handleToggleNodeDone,
-        onUpdateNodeData: handleUpdateNodeData,
-        onDeleteNode: handleDeleteNode,
-        onAddNodeAfter: handleAddNodeAfter,
-        onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
-        onManualToggleExpansion: handleManualToggleExpansion,
-        onUpdateNodeColor: handleUpdateNodeColor,
-      },
-      draggable: true,
-      selectable: true,
-    };
-    setNodes([tempLoadingNode]);
-    setEdges([]); 
-    setNodeIdCounter(currentTempNodeIdCounter);
-
-    try {
-      const result = await generateRoadmap({ prompt: promptToUse });
-      
-      if (!result.roadmap || result.roadmap.length === 0) {
-        toast({
-          title: 'No Roadmap Generated',
-          description: 'The AI did not return any roadmap steps. Try a different prompt.',
-          variant: 'default',
-        });
-        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId)); 
-        setEdges([]);
-        return;
-      }
-      
-      let newNodesCounter = nodeIdCounter;
-      const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
-        const currentNodesCount = index; 
-        const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50; 
-        const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
-        const nodeId = `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${newNodesCounter + index}`;
-        return {
-          id: nodeId,
-          type: 'wordNode',
-          position: { x: xPosition, y: yPosition },
-          data: { 
-            title: step.title, 
-            description: step.description, 
-            isLoading: false, 
-            isDone: false, 
-            onToggleDone: handleToggleNodeDone, 
-            onUpdateNodeData: handleUpdateNodeData,
-            onDeleteNode: handleDeleteNode, 
-            onAddNodeAfter: handleAddNodeAfter,
-            onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt, 
-            onManualToggleExpansion: handleManualToggleExpansion,
-            onUpdateNodeColor: handleUpdateNodeColor, 
-            color: DEFAULT_NODE_COLOR, 
-            _isExpandedOverride: !!step.description, 
-            depth: 0, // Add initial depth for main nodes
-          },
-          draggable: true,
-          selectable: true,
-        };
-      });
-      
-      const newEdgesFromAI: Edge[] = [];
-      if (newNodesFromAI.length > 1) {
-        for (let i = 0; i < newNodesFromAI.length - 1; i++) {
-          newEdgesFromAI.push({
-            id: `e-${newNodesFromAI[i].id}-${newNodesFromAI[i+1].id}`,
-            source: newNodesFromAI[i].id,
-            target: newNodesFromAI[i+1].id,
-            animated: true,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
-              color: 'hsl(var(--accent))',
-            },
-            style: {
-              strokeWidth: 2,
-              stroke: 'hsl(var(--accent))',
-            }
-          });
-        }
-      }
-      
-      setNodeIdCounter(newNodesCounter + result.roadmap.length);
-      setNodes(newNodesFromAI); 
-      setEdges(newEdgesFromAI);
-
-      toast({
-        title: 'Roadmap Generated!',
-        description: `Created ${newNodesFromAI.length} steps for your project.`,
-      });
-
-    } catch (error) {
-      console.error('Roadmap generation error:', error);
-      let errorMessage = 'Failed to generate roadmap. Please try again.';
-      if (error instanceof Error) {
-        errorMessage = error.message.includes("output was null") 
-          ? "AI failed to produce a valid roadmap structure. Try rephrasing your prompt." 
-          : error.message.includes("roadmap array is missing")
-          ? "AI output was invalid. Roadmap data is not correctly formatted."
-          : error.message;
-      }
-      toast({
-        title: 'Error Generating Roadmap',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-      setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
-      setEdges([]);
-    } finally {
-      setIsLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    promptText, toast, reactFlowInstance, 
-    nodeIdCounter, setNodeIdCounter,
-    setNodes, setEdges,
-    handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, 
-    handleAddNodeAfter, handleManualToggleExpansion, handleUpdateNodeColor,
-    handleGenerateSubRoadmapPrompt
-  ]);
-
-  useEffect(() => {
-    const initialPromptFromQuery = searchParams.get('prompt');
-    if (projectId === 'new' && initialPromptFromQuery && !generationAttempted.current) {
-       if (nodes.length === 0 && !isLoading) {
-        setPromptText(initialPromptFromQuery);
-        doGenerateRoadmap(initialPromptFromQuery);
-        generationAttempted.current = true;
-      }
-    } else if (projectId !== 'new' && initialPromptFromQuery) {
-        setPromptText(initialPromptFromQuery); 
-        generationAttempted.current = false;
-    }
-  }, [projectId, searchParams, doGenerateRoadmap, nodes.length, isLoading]);
-
-  const handleNodeSelectFromSidebar = (nodeId: string) => {
-    setSelectedNodeIdFromSidebar(nodeId);
-    setNodes(nds => 
-      nds.map(n => ({
-        ...n,
-        selected: n.id === nodeId,
-      }))
-    );
-    const nodeToFocus = nodes.find(n => n.id === nodeId);
-    if (nodeToFocus && reactFlowInstance) {
-        reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 500, padding: 0.3 });
-    }
-  };
-
-  const handleExpandAllNodes = () => {
-    if (isLoading || nodes.length === 0) return;
-    setGlobalExpansionOverride(true);
-  };
-
-  const handleCollapseAllNodes = () => {
-    if (isLoading || nodes.length === 0) return;
-    setGlobalExpansionOverride(false);
-  };
-
+export default function LandingPage() {
   return (
-    <SidebarProvider>
-      <RoadmapSidebar 
-        nodes={nodes}
-        isLoading={isLoading}
-        selectedNodeIdFromSidebar={selectedNodeIdFromSidebar}
-        onNodeSelect={handleNodeSelectFromSidebar}
-      />
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-50">
+      {/* Navigation */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/30 dark:border-border/50 bg-background/80 dark:bg-background/70 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6">
+          <Link href="/" className="flex items-center space-x-2">
+            <Image src="/logos/SymbolAndText_Logo_TransparentBG.png" alt="StratPave Logo" width={128} height={32} className="h-8 w-auto" priority />
+          </Link>
+          <nav className="flex items-center space-x-1 sm:space-x-2">
+            <Button variant="ghost" asChild className="text-foreground/80 hover:text-primary">
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+            <Button variant="ghost" asChild className="text-foreground/80 hover:text-primary">
+              <Link href="#features">Features</Link>
+            </Button>
+            <Button variant="ghost" asChild className="text-foreground/80 hover:text-primary">
+               <Link href="#tech-stack">Technology</Link>
+            </Button>
+            <ThemeToggle />
+             <Link href="/dashboard" legacyBehavior passHref>
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-shadow">
+                Get Started
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </nav>
+        </div>
+      </header>
 
-      <SidebarInset className="flex flex-col h-screen">
-        <ProjectHeader 
-          promptText={promptText}
-          onPromptTextChange={setPromptText}
-          onGenerateRoadmap={() => doGenerateRoadmap()} 
-          isLoading={isLoading}
-          nodes={nodes}
-          projectId={projectId}
-          onExpandAll={handleExpandAllNodes}
-          onCollapseAll={handleCollapseAllNodes}
-          isMiniMapVisible={isMiniMapVisible}
-          onToggleMiniMap={() => setIsMiniMapVisible(!isMiniMapVisible)}
-        />
-        
-        <main className="flex-grow relative" aria-label="React Flow canvas area">
-          <RoadmapCanvas 
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            nodeTypes={nodeTypes}
-            isMiniMapVisible={isMiniMapVisible}
-          />
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      {/* Hero Section */}
+      <main className="flex-1">
+        <section className="relative w-full py-20 md:py-32 lg:py-40 xl:py-48 overflow-hidden">
+          <div className="absolute inset-0 z-0">
+            <Image 
+              src="/images/background.png" // Replace with an actual appealing background
+              alt="Abstract Background" 
+              layout="fill" 
+              objectFit="cover" 
+              quality={80} 
+              className="opacity-10 dark:opacity-5" 
+              priority
+              data-ai-hint="abstract futuristic"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-background via-transparent to-background opacity-60 dark:opacity-70"></div>
+          </div>
+          
+          <div className="container px-4 md:px-6 relative z-10">
+            <div className="grid gap-8 lg:grid-cols-2 lg:gap-16 items-center">
+              <div className="flex flex-col justify-center space-y-6">
+                <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl xl:text-7xl/none bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-500 to-teal-500 py-2">
+                  AI-Powered Project Roadmapping
+                </h1>
+                <p className="max-w-[600px] text-muted-foreground md:text-xl lg:text-lg xl:text-xl">
+                  Turn your complex ideas into clear, actionable plans. StratPave uses AI to generate detailed roadmaps and visualizes them as interactive, editable flowcharts.
+                </p>
+                <div className="flex flex-col gap-3 min-[400px]:flex-row pt-4">
+                  <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform hover:scale-105">
+                    <Link href="/dashboard">
+                      Launch App
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="lg" asChild className="border-primary/50 text-primary hover:bg-primary/5 dark:hover:bg-primary/10 shadow-lg transition-transform hover:scale-105">
+                     <Link href="#features">
+                        Learn More
+                     </Link>
+                  </Button>
+                </div>
+              </div>
+              <div className="hidden lg:flex items-center justify-center p-4 md:p-8">
+                <Image 
+                  src="/images/background.png" // Replace with a dynamic product screenshot or illustration
+                  alt="StratPave Roadmap Illustration" 
+                  width={600} 
+                  height={450} 
+                  className="rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-500 border border-border/20" 
+                  data-ai-hint="roadmap flowchart planning"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Features Section */}
+        <section id="features" className="w-full py-16 md:py-24 lg:py-32 bg-background/70 dark:bg-background/50">
+          <div className="container px-4 md:px-6">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12 lg:mb-16">
+              <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm text-primary font-medium">
+                Key Features
+              </div>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl text-foreground">
+                Everything You Need to Plan Success
+              </h2>
+              <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                StratPave offers a suite of powerful tools to streamline your project planning, from initial idea to detailed execution steps, all powered by intelligent AI.
+              </p>
+            </div>
+            <div className="mx-auto grid max-w-5xl items-start gap-6 sm:grid-cols-2 md:gap-8 lg:grid-cols-3">
+              {[
+                { icon: Brain, title: "AI Roadmap Generation", description: "Instantly generate comprehensive roadmaps from simple text prompts using advanced AI.", color: "text-pink-600 dark:text-pink-400" },
+                { icon: Workflow, title: "Interactive Flowcharts", description: "Visualize and edit your projects with an intuitive React Flow canvas.", color: "text-blue-600 dark:text-blue-400" },
+                { icon: Layers, title: "Detailed Sub-Roadmaps", description: "Break down complex tasks into manageable sub-steps for greater clarity and control.", color: "text-purple-600 dark:text-purple-400" },
+                { icon: Users, title: "User Accounts & Storage", description: "Securely save and manage your personal roadmaps with Firebase Authentication and Firestore.", color: "text-green-600 dark:text-green-400" },
+                { icon: Edit, title: "Intuitive Editing", description: "Easily edit titles, descriptions, mark steps as complete, and add new steps on the fly.", color: "text-orange-600 dark:text-orange-400" },
+                { icon: Eye, title: "Customizable View", description: "Toggle minimap, expand/collapse descriptions, and manage your workspace effectively.", color: "text-teal-600 dark:text-teal-400" },
+              ].map(feature => (
+                <div key={feature.title} className="flex flex-col items-center text-center p-6 bg-card rounded-xl shadow-lg hover:shadow-primary/10 dark:hover:shadow-primary/20 transition-all duration-300 hover:scale-[1.02]">
+                  <feature.icon className={`h-10 w-10 mb-4 ${feature.color}`} strokeWidth={1.5}/>
+                  <h3 className="text-xl font-semibold mb-2 text-card-foreground">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Tech Stack Section */}
+        <section id="tech-stack" className="w-full py-16 md:py-24 lg:py-32 bg-muted/30 dark:bg-muted/20">
+          <div className="container px-4 md:px-6">
+            <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12 lg:mb-16">
+              <div className="inline-block rounded-lg bg-background px-3 py-1 text-sm text-primary font-medium border border-primary/30">
+                Powered By
+              </div>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl text-foreground">
+                Modern Technology Stack
+              </h2>
+              <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+                Built with cutting-edge tools for a robust, scalable, and performant experience.
+              </p>
+            </div>
+            <div className="mx-auto grid max-w-4xl grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 text-center">
+              {[
+                "Next.js", "TypeScript", "Tailwind CSS", "ShadCN UI", "React Flow",
+                "Genkit", "Google AI", "Firebase Auth", "Firestore", "Lucide Icons", "Zod"
+              ].map((tech) => (
+                <div key={tech} className="flex flex-col items-center justify-center p-4 bg-card rounded-lg shadow-md hover:shadow-blue-400/20 dark:hover:shadow-blue-500/30 transition-all duration-300 hover:scale-105 border border-border/50">
+                  <Code className="h-7 w-7 mb-2 text-muted-foreground" strokeWidth={1.5}/>
+                  <span className="text-xs sm:text-sm font-medium text-foreground/90">{tech}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="py-8 md:px-8 border-t border-border/30 bg-background/80 dark:bg-background/70">
+        <div className="container flex flex-col items-center justify-between gap-4 md:h-20 md:flex-row">
+          <div className="flex items-center space-x-2">
+            <Image src="/logos/Symbol_Logo_TransparentBG.png" alt="StratPave Icon" width={24} height={24} className="h-6 w-auto" />
+            <p className="text-balance text-center text-sm leading-loose text-muted-foreground md:text-left">
+              StratPave &copy; {new Date().getFullYear()}. Plan Smarter. Build Faster.
+            </p>
+          </div>
+          <p className="text-center text-xs text-muted-foreground/70">
+            All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
-
-export default function ProjectPage() {
-  return (
-    <ReactFlowProvider>
-      <FlowCanvas />
-    </ReactFlowProvider>
-  );
-}
-

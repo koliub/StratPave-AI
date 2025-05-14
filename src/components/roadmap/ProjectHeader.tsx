@@ -36,7 +36,7 @@ export function ProjectHeader({
   return (
     <header className="p-4 border-b border-border shadow-sm bg-card sticky top-0 z-50">
       <div className="container mx-auto flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
-        <Link href="/" passHref>
+        <Link href="/dashboard" passHref>
           <Button variant="outline" size="icon" title="Back to Home" className="shrink-0 p-2 h-10 w-10">
             <HomeIcon className="h-5 w-5" />
           </Button>
