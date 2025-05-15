@@ -24,37 +24,11 @@ export function ThemeProvider({
   defaultTheme = 'system',
   storageKey = 'ai-roadmap-theme',
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') {
-      return defaultTheme;
-    }
-    try {
-      const storedTheme = localStorage.getItem(storageKey) as Theme | null;
-      return storedTheme || defaultTheme;
-    } catch (e) {
-      console.warn(`Failed to read theme from localStorage (key: "${storageKey}"):`, e);
-      return defaultTheme;
-    }
-  });
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
 
-  const [resolvedTheme, setResolvedThemeState] = useState<'dark' | 'light'>(() => {
-    let initialResolvedTheme: 'dark' | 'light';
-    const currentThemePreference = (typeof window !== 'undefined' ? localStorage.getItem(storageKey) as Theme : null) || defaultTheme;
-
-    if (currentThemePreference === 'system') {
-      if (typeof window !== 'undefined') {
-        initialResolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      } else {
-        initialResolvedTheme = 'light'; // Fallback for SSR if 'system' is default
-      }
-    } else {
-      initialResolvedTheme = currentThemePreference as 'dark' | 'light';
-    }
-    return initialResolvedTheme;
-  });
-
-
-  useEffect(() => {
+  const [resolvedTheme, setResolvedThemeState] = useState<'dark' | 'light'>('light');
+  
+   useEffect(() => {
     const root = window.document.documentElement;
     let currentAppliedTheme: 'dark' | 'light';
 
@@ -67,7 +41,21 @@ export function ThemeProvider({
     root.classList.remove('dark', 'light');
     root.classList.add(currentAppliedTheme);
     setResolvedThemeState(currentAppliedTheme);
-  }, [theme]); 
+  }, [theme]);
+
+  // Effect to initialize theme from localStorage on mount
+  useEffect(() => {
+    try {
+      const storedTheme = localStorage.getItem(storageKey) as Theme | null;
+      if (storedTheme) {
+        setThemeState(storedTheme);
+      }
+    } catch (e) {
+      console.warn(`Failed to read theme from localStorage (key: "${storageKey}"):`, e);
+    }
+  }, [storageKey]); // Only run on mount and if storageKey changes
+
+
 
   useEffect(() => {
     if (theme !== 'system') {
@@ -85,6 +73,7 @@ export function ThemeProvider({
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]); 
+
 
   const setTheme = (newTheme: Theme) => {
     try {

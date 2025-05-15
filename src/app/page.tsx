@@ -1,17 +1,27 @@
+"use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Brain, Zap, Workflow, Layers, Code, ShieldCheck, Users, Eye, Edit } from 'lucide-react'; 
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { useTheme } from '@/components/theme-provider';
 
 export default function LandingPage() {
+  const { resolvedTheme } = useTheme();
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-50">
+    <div className="flex flex-col min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-50">
       {/* Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-border/30 dark:border-border/50 bg-background/80 dark:bg-background/70 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6">
+        <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6 mx-auto"> {/* Added mx-auto for centering */}
           <Link href="/" className="flex items-center space-x-2">
-            <Image src="/logos/SymbolAndText_Logo_TransparentBG.png" alt="StratPave Logo" width={128} height={32} className="h-8 w-auto" priority />
+            <Image
+              src="/logos/SymbolAndText_Logo_TransparentBG.png"
+              alt={resolvedTheme === 'dark' ? 'StratPave White Logo' : 'StratPave Logo'}
+              width={128}
+              height={32}
+              className="h-8 w-auto"
+              priority
+            />
           </Link>
           <nav className="flex items-center space-x-1 sm:space-x-2">
             <Button variant="ghost" asChild className="text-foreground/80 hover:text-primary">
@@ -38,7 +48,7 @@ export default function LandingPage() {
       <main className="flex-1">
         <section className="relative w-full py-20 md:py-32 lg:py-40 xl:py-48 overflow-hidden">
           <div className="absolute inset-0 z-0">
-            <Image 
+            <Image
               src="/images/background.png" // Replace with an actual appealing background
               alt="Abstract Background" 
               layout="fill" 
@@ -51,7 +61,7 @@ export default function LandingPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-background via-transparent to-background opacity-60 dark:opacity-70"></div>
           </div>
           
-          <div className="container px-4 md:px-6 relative z-10">
+          <div className="container mx-auto max-w-7xl relative z-10">
             <div className="grid gap-8 lg:grid-cols-2 lg:gap-16 items-center">
               <div className="flex flex-col justify-center space-y-6">
                 <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl xl:text-7xl/none bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-500 to-teal-500 py-2">
@@ -90,7 +100,7 @@ export default function LandingPage() {
 
         {/* Features Section */}
         <section id="features" className="w-full py-16 md:py-24 lg:py-32 bg-background/70 dark:bg-background/50">
-          <div className="container px-4 md:px-6">
+          <div className="container px-4 md:px-6 mx-auto max-w-7xl">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12 lg:mb-16">
               <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm text-primary font-medium">
                 Key Features
@@ -125,7 +135,7 @@ export default function LandingPage() {
 
         {/* Tech Stack Section */}
         <section id="tech-stack" className="w-full py-16 md:py-24 lg:py-32 bg-muted/30 dark:bg-muted/20">
-          <div className="container px-4 md:px-6">
+          <div className="container px-4 md:px-6 mx-auto max-w-7xl">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12 lg:mb-16">
               <div className="inline-block rounded-lg bg-background px-3 py-1 text-sm text-primary font-medium border border-primary/30">
                 Powered By
@@ -156,7 +166,13 @@ export default function LandingPage() {
       <footer className="py-8 md:px-8 border-t border-border/30 bg-background/80 dark:bg-background/70">
         <div className="container flex flex-col items-center justify-between gap-4 md:h-20 md:flex-row">
           <div className="flex items-center space-x-2">
-            <Image src="/logos/Symbol_Logo_TransparentBG.png" alt="StratPave Icon" width={24} height={24} className="h-6 w-auto" />
+            <Image
+              src="/logos/Symbol_Logo_TransparentBG.png"
+              alt="StratPave Icon"
+              width={24}
+              height={24}
+              className="h-6 w-auto"
+            />
             <p className="text-balance text-center text-sm leading-loose text-muted-foreground md:text-left">
               StratPave &copy; {new Date().getFullYear()}. Plan Smarter. Build Faster.
             </p>
