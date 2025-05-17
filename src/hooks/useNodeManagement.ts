@@ -11,7 +11,7 @@ import {
   type ReactFlowInstance,
   MarkerType,
 } from 'reactflow';
-import { type WordNodeData } from '@/components/word-node';
+import { type WordNodeData } from '@/components/roadmap/word-node';
 import { useToast } from '@/hooks/use-toast';
 import { generateSubRoadmap, type GenerateSubRoadmapInput } from '@/ai/flows/generate-roadmap-flow';
 

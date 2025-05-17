@@ -1,22 +1,26 @@
+
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Brain, Zap, Workflow, Layers, Code, ShieldCheck, Users, Eye, Edit } from 'lucide-react'; 
 import Image from 'next/image';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { useTheme } from '@/components/theme-provider';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
+//import { UserAuthSection } from '@/components/UserAuthSection'; // Import UserAuthSection
+import { useTheme } from '@/components/theme/theme-provider';
 
 export default function LandingPage() {
   const { resolvedTheme } = useTheme();
+  const logoSrc = resolvedTheme === 'dark' ? '/logos/WhiteSymbolAndText_Logo_TransparentBG.png' : '/logos/SymbolAndText_Logo_TransparentBG.png';
+
   return (
     <div className="flex flex-col min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-50">
       {/* Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-border/30 dark:border-border/50 bg-background/80 dark:bg-background/70 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6 mx-auto"> {/* Added mx-auto for centering */}
+        <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6 mx-auto">
           <Link href="/" className="flex items-center space-x-2">
             <Image
-              src="/logos/SymbolAndText_Logo_TransparentBG.png"
-              alt={resolvedTheme === 'dark' ? 'StratPave White Logo' : 'StratPave Logo'}
+              src={logoSrc}
+              alt="StratPave Logo"
               width={128}
               height={32}
               className="h-8 w-auto"
@@ -34,8 +38,11 @@ export default function LandingPage() {
                <Link href="#tech-stack">Technology</Link>
             </Button>
             <ThemeToggle />
+            <div className="hidden sm:flex"> {/* Hide UserAuthSection on small screens if Get Started button is preferred */}
+             {/* <UserAuthSection /> */}    
+            </div>
              <Link href="/dashboard" legacyBehavior passHref>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-shadow">
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-shadow sm:hidden"> {/* Show only on small screens */}
                 Get Started
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -49,7 +56,7 @@ export default function LandingPage() {
         <section className="relative w-full py-20 md:py-32 lg:py-40 xl:py-48 overflow-hidden">
           <div className="absolute inset-0 z-0">
             <Image
-              src="/images/background.png" // Replace with an actual appealing background
+              src="https://placehold.co/1920x1080.png"
               alt="Abstract Background" 
               layout="fill" 
               objectFit="cover" 
@@ -86,7 +93,7 @@ export default function LandingPage() {
               </div>
               <div className="hidden lg:flex items-center justify-center p-4 md:p-8">
                 <Image 
-                  src="/images/background.png" // Replace with a dynamic product screenshot or illustration
+                  src="https://placehold.co/600x450.png"
                   alt="StratPave Roadmap Illustration" 
                   width={600} 
                   height={450} 

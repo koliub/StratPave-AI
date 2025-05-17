@@ -13,7 +13,7 @@ import {
 import 'reactflow/dist/style.css';
 import { useSearchParams, useParams } from 'next/navigation';
 
-import { WordNode, type WordNodeData } from '@/components/word-node';
+import { WordNode, type WordNodeData } from '@/components/roadmap/word-node';
 import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -135,7 +135,7 @@ function FlowCanvas() {
       }
       
       let newNodesCounter = nodeIdCounter;
-      const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => { // this dogenerateroadmap adding to array is extremely dumb and unnecesary
+      const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => { 
         const currentNodesCount = index; 
         const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50; 
         const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
@@ -285,17 +285,18 @@ function FlowCanvas() {
 
       <SidebarInset className="flex flex-col h-screen">
         <ProjectHeader 
-          promptText={promptText}
-          onPromptTextChange={setPromptText}
-          onGenerateRoadmap={() => doGenerateRoadmap()} 
-          isLoading={isLoading}
+          projectTitle='Project Title'
           nodes={nodes}
           projectId={projectId}
           onExpandAll={handleExpandAllNodes}
           onCollapseAll={handleCollapseAllNodes}
           isMiniMapVisible={isMiniMapVisible}
           onToggleMiniMap={() => setIsMiniMapVisible(!isMiniMapVisible)}
-        />
+          onProjectTitleChange={function (value: string): void {
+            throw new Error('Function not implemented.');
+          } } onSaveRoadmap={function (): Promise<string | null> {
+            throw new Error('Function not implemented.');
+          } } isLoading={false} isUserLoggedIn={false}        />
         
         <main className="flex-grow relative" aria-label="React Flow canvas area">
           <RoadmapCanvas 
