@@ -23,8 +23,8 @@ import { UserAuthSection } from '@/components/auth/UserAuthSection'; // Import U
 import { Loader2, PlusCircle, Trash2, FileText } from 'lucide-react';
 // Importing hooks/contexts.
 import { useTheme } from '@/components/theme/theme-provider';
-// Assuming there is a hook or context to get the current user
-// import { useAuthContext } from '@/context/AuthContext'; // Uncomment and use this if available
+// Importing the correct auth hook
+import { useAuth } from '@/context/AuthContext';
 // Importing Firebase interaction functions and types.
 import { getUserProjectsFromDb, deleteProjectFromDb, ProjectPreview } from '@/lib/firebase'; // Import firebase functions and types
 
@@ -32,7 +32,7 @@ import { getUserProjectsFromDb, deleteProjectFromDb, ProjectPreview } from '@/li
 export default function Dashboard() {
   // --- State Management Section ---
   // State for the input field for new roadmap title.
-  const [roadmapTitle, setRoadmapTitle] = useState('');
+  const [pormptText, setPrompt] = useState('');
   // State to store the list of user's projects (roadmaps).
   const [projects, setProjects] = useState<ProjectPreview[]>([]);
   // State to indicate if projects are currently being loaded.
@@ -46,13 +46,9 @@ export default function Dashboard() {
   // Determining the logo source based on the current theme.
   const logoSrc = theme === 'dark' ? '/logos/WhiteSymbolAndText_Logo_TransparentBG.png' : '/logos/SymbolAndText_Logo_TransparentBG.png';
 
-  // --- Authentication Logic (Dummy) ---
-  // TODO: Replace with real auth context user - using a dummy user for now
-  // Getting the current authenticated user. Replace with real context hook.
-  const currentUser = {
-    uid: 'dummy-user-id'
-  };
-  // const { currentUser } = useAuthContext(); // Get current user from auth context
+  // --- Authentication Logic ---
+  // Getting the current authenticated user from auth context.
+  const { user } = useAuth(); // Corrected: use useAuth and access user
 
   // --- Data Fetching Logic (useEffect) ---
   // Effect hook to fetch user projects when the component mounts or user changes.
@@ -60,7 +56,8 @@ export default function Dashboard() {
     // Async function to fetch projects from the database.
     const fetchProjects = async () => {
       // Check if a user is authenticated.
-      if (!currentUser?.uid) {
+      if (!user?.uid) { // Corrected: use user?.uid
+        // If no authenticated user, set loading to false and clear projects.
         setLoading(false);
         setProjects([]);
         console.warn("No authenticated user found. Cannot fetch projects.");
@@ -69,7 +66,7 @@ export default function Dashboard() {
       try {
         setLoading(true);
         // Fetch projects accessible by the current user.
-        const userProjects = await getUserProjectsFromDb(currentUser.uid);
+        const userProjects = await getUserProjectsFromDb(user.uid); // Corrected: use user.uid
         // TODO: Consider adding logic here to filter projects based on the logged-in user's specific access rights (e.g., ownership, shared access)
         // Update the state with the fetched projects.
         setProjects(userProjects);
@@ -83,23 +80,30 @@ export default function Dashboard() {
       }
     };
 
-    // Call the fetch projects function.
-    fetchProjects();
-    // Dependency array includes currentUser.uid to refetch if the user changes.
-  }, [currentUser?.uid]);
+    // Call the fetch projects function only if user is logged in.
+    if (user?.uid) { // Corrected: use user?.uid
+      fetchProjects();
+    } else {
+       // If not logged in, set loading to false immediately.
+      setLoading(false);
+      setProjects([]); // Ensure projects are empty if not logged in
+    }
+
+    // Dependency array includes user?.uid to refetch if the user changes.
+  }, [user?.uid]); // Corrected: use user?.uid
 
   // --- Event Handlers Section ---
   // Handler for creating a new roadmap.
   const handleCreateRoadmap = () => {
     // Handle roadmap creation logic here.
-    if (roadmapTitle.trim()) {
+    if (pormptText.trim()) {
       // Store the roadmap title in session storage.
-      sessionStorage.setItem('roadmapPrompt', roadmapTitle);
-      console.log('Creating roadmap:', roadmapTitle);
+      sessionStorage.setItem('roadmapPrompt', pormptText);
+      console.log('Creating roadmap:', pormptText);
       // Navigate to the /app page.
       router.push('/app');
       // Clear the input field.
-      setRoadmapTitle('');
+      setPrompt('');
     } else {
       // TODO: Add user feedback for empty title.
       console.warn("Roadmap title cannot be empty.");
@@ -109,7 +113,7 @@ export default function Dashboard() {
   // Handler for deleting a project.
   const handleDeleteProject = async (projectId: string) => {
     // Check if user is authenticated.
-    if (!currentUser?.uid) {
+    if (!user?.uid) { // Corrected: use user?.uid
       console.error("User not authenticated. Cannot delete project.");
       // TODO: Implement user-facing error handling
       return;
@@ -117,7 +121,7 @@ export default function Dashboard() {
     try {
       console.log('Deleting project:', projectId);
       // Call the firebase delete function.
-      await deleteProjectFromDb(currentUser.uid, projectId);
+      await deleteProjectFromDb(user.uid, projectId); // Corrected: use user.uid
       // Remove the deleted project from the local state to update the UI.
       setProjects(projects.filter(project => project.id !== projectId));
       // TODO: Implement user feedback for successful deletion (e.g., toast notification)
@@ -162,21 +166,25 @@ export default function Dashboard() {
                 />
               </div>
             </Link>
+            
             {/* Section title for user roadmaps */}
             <h2 className="text-2xl font-semibold mb-6 flex items-center">
               <FileText className="mr-3 h-7 w-7 text-primary" />
               Your Roadmaps
             </h2>
 
-            {/* Loading state or list of projects */}
-            {loading ? (
-              // Loading indicator.
+            {/* Conditional rendering based on auth status and loading state */}
+            {!user?.uid ? ( // Corrected: use user?.uid
+              // Display message if user is not logged in
+              <p className="text-center">Login to save your Roadmaps.</p>
+            ) : loading ? ( // This loading state is for fetching projects, not auth
+              // Loading indicator if user is logged in and projects are loading
               <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin" /></div>
             ) : projects.length === 0 ? (
-              // Message when no projects are found.
+              // Message when user is logged in but no projects are found.
               <p>No projects found. Create one above!</p>
             ) : (
-              // Mapping and displaying each project as a Card.
+              // Mapping and displaying each project as a Card when user is logged in and projects are available.
               projects.map((project) => (
                 // Use project.id as the key for list rendering.
                 <Card key={project.id} className="mb-4 w-full transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 ">
@@ -188,7 +196,7 @@ export default function Dashboard() {
                       <CardContent className="p-4 cursor-pointer">
                         {/* Project title and delete button */}
                         <div className="flex justify-between items-center mb-2">
-                          <CardTitle className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap">{project.title || 'Untitled Project'}</CardTitle>
+                          <CardTitle className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap">{project.projectTitle}</CardTitle>
                           {/* Delete button within DropdownMenu - placed outside the Link but visually within the card */}
                           {/* To make the dropdown clickable and prevent link navigation, stop propagation */}
                           {/* The DropdownMenuTrigger needs to be clickable */}
@@ -226,10 +234,10 @@ export default function Dashboard() {
                           Last updated: {formatTimestamp(project.updatedAt)}
                         </div>
                         {/* Retain dummy progress bar structure as requested, but no dynamic value */}
-                        <Progress value={75} className="mb-2 [&>div]:bg-gradient-to-r [&>div]:from-teal-400 [&>div]:to-blue-600" /> 
+                        <Progress value={75} className="mb-2 [&>div]:bg-gradient-to-r [&>div]:from-teal-400 [&>div]:to-blue-600" />
                          <div className="text-sm text-gray-500">
-                            '75'
-                          </div> 
+                            75
+                          </div>
                       </CardContent>
                     </a>
                   </Link>
@@ -260,8 +268,8 @@ export default function Dashboard() {
                   <Input
                     type="text"
                     placeholder="Enter roadmap title" // Placeholder for dynamic input
-                    value={roadmapTitle}
-                    onChange={(e) => setRoadmapTitle(e.target.value)}
+                    value={pormptText}
+                    onChange={(e) => setPrompt(e.target.value)}
                     className="flex-grow rounded-full"
                     // Handle Enter key press to trigger roadmap creation
                     onKeyPress={(e) => {

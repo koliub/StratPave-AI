@@ -35,6 +35,7 @@ const DEFAULT_NODE_COLOR = '#A0A0A0';
 
 function FlowCanvas() {
   const [promptText, setPromptText] = useState('');
+  const [projectTitle, setProjectTitle] = useState(''); // New state for project title
   const [isLoading, setIsLoading] = useState(false); 
   const [selectedNodeIdFromSidebar, setSelectedNodeIdFromSidebar] = useState<string | null>(null);
   const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
@@ -196,6 +197,9 @@ function FlowCanvas() {
       setNodes(newNodesFromAI);
       setEdges(newEdgesFromAI);
 
+      // Set project title to the prompt text on initial generation
+      setProjectTitle(promptToUse);
+
       toast({
         title: 'Roadmap Generated!',
         description: `Created ${newNodesFromAI.length} steps for your project.`,
@@ -225,7 +229,7 @@ function FlowCanvas() {
   }, [
     promptText, toast, reactFlowInstance,
     setNodeIdCounter, // Removed nodeIdCounter from deps as it's managed internally now
-    setNodes, setEdges,
+    setNodes, setEdges, setProjectTitle,
     handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
     handleAddNodeAfter, handleManualToggleExpansion, handleUpdateNodeColor,
     handleGenerateSubRoadmapPrompt
@@ -246,6 +250,8 @@ function FlowCanvas() {
                 setNodes(projectData.nodes || []);
                 setEdges(projectData.edges || []);
                 setPromptText(projectData.prompt || '');
+                // Set project title from loaded data, or default to prompt if not present
+                setProjectTitle(projectData.projectTitle || projectData.prompt || '');
                 // Determine the highest existing node ID to set the counter
                 const maxNodeId = projectData.nodes.reduce((max: number, node: Node<WordNodeData>) => {
                   // Assuming node IDs are in the format 'somenode_number'
@@ -301,11 +307,13 @@ function FlowCanvas() {
 
       if (storedPrompt) {
         setPromptText(storedPrompt);
+        setProjectTitle(storedPrompt); // Set project title from stored prompt
         doGenerateRoadmap(storedPrompt);
         sessionStorage.removeItem('roadmapPrompt'); // Clean up sessionStorage
         generationAttempted.current = true;
       } else if (initialPromptFromQuery && projectId === 'new') {
         setPromptText(initialPromptFromQuery);
+        setProjectTitle(initialPromptFromQuery); // Set project title from query prompt
         doGenerateRoadmap(initialPromptFromQuery);
         generationAttempted.current = true;
       } else if (!initialPromptFromQuery && !storedPrompt && projectId === 'new') {
@@ -320,7 +328,7 @@ function FlowCanvas() {
         setProjectLoaded(true); // Consider it loaded as an empty project
       }
     }
-  }, [projectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setNodeIdCounter, doGenerateRoadmap, searchParams]);
+  }, [projectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setProjectTitle, setNodeIdCounter, doGenerateRoadmap, searchParams]);
 
 
   const handleNodeSelectFromSidebar = (nodeId: string) => {
@@ -382,6 +390,7 @@ function FlowCanvas() {
         nodes: nodesToSave,
         edges: edges,
         prompt: promptText,
+        projectTitle: projectTitle, // Save the separate project title
       };
 
       const savedProjectId = await saveProjectToDb(user.uid, projectId || null, projectToSave);
@@ -409,7 +418,7 @@ function FlowCanvas() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, projectId, nodes, edges, promptText, toast, router]);
+  }, [user, projectId, nodes, edges, promptText, projectTitle, toast, router]); // Added projectTitle to deps
 
 
   return (
@@ -423,14 +432,14 @@ function FlowCanvas() {
 
       <SidebarInset className="flex flex-col h-screen">
         <ProjectHeader
-          projectTitle={promptText || 'Untitled Project'} // Use prompt as title initially
+          projectTitle={projectTitle} // Use projectTitle state for display
           nodes={nodes}
           projectId={projectId || 'new'} // Pass projectId to header
           onExpandAll={handleExpandAllNodes}
           onCollapseAll={handleCollapseAllNodes}
           isMiniMapVisible={isMiniMapVisible}
           onToggleMiniMap={() => setIsMiniMapVisible(!isMiniMapVisible)}
-          onProjectTitleChange={setPromptText} // Allow changing title
+          onProjectTitleChange={setProjectTitle} // Update projectTitle state on change
           onSaveRoadmap={handleSaveRoadmap} // Pass save function
           isLoading={isLoading}
           isUserLoggedIn={!!user}

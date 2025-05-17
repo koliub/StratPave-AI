@@ -40,14 +40,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authError, setAuthError] = useState<AuthError | null>(null);
 
   const handleUserInFirestore = async (firebaseUser: User) => {
-    if (!firebaseUser) return;
+    console.log("Firestore: handleUserInFirestore started for user:", firebaseUser.uid);
+    if (!firebaseUser) {
+      console.log("Firestore: handleUserInFirestore received null user.");
+      return;
+    }
 
     const userRef = doc(db, 'users', firebaseUser.uid);
-    const userSnap = await getDoc(userRef);
+    
+    try {
+      console.log("Firestore: Attempting getDoc for user:", firebaseUser.uid);
+      const userSnap = await getDoc(userRef);
+      console.log("Firestore: getDoc finished for user:", firebaseUser.uid, "Exists:", userSnap.exists());
 
-    if (!userSnap.exists()) {
-      // Create new user document
-      try {
+      if (!userSnap.exists()) {
+        // Create new user document
+        console.log("Firestore: Creating new user document for", firebaseUser.uid);
         await setDoc(userRef, {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -56,89 +64,111 @@ export function AuthProvider({ children }: AuthProviderProps) {
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
         });
-      } catch (error) {
-        console.error("Error creating user document in Firestore:", error);
-        // Optionally set an error state here for UI feedback
-      }
-    } else {
-      // Update existing user document (e.g., lastLogin)
-      try {
+        console.log("Firestore: New user document created for", firebaseUser.uid);
+      } else {
+        // Update existing user document (e.g., lastLogin)
+        console.log("Firestore: Updating lastLogin for user", firebaseUser.uid);
         await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
-      } catch (error) {
-        console.error("Error updating user document in Firestore:", error);
+        console.log("Firestore: User document updated for", firebaseUser.uid);
       }
+    } catch (error) {
+      console.error("Firestore: Error in handleUserInFirestore for user", firebaseUser.uid, ":", error);
+      // Decide if this error should affect the loading state. Probably not blocking setLoading(false).
     }
+     console.log("Firestore: handleUserInFirestore finished for user:", firebaseUser.uid);
   };
 
   useEffect(() => {
+    console.log("AuthContext: Setting up onAuthStateChanged listener.");
+    const startTime = performance.now(); // Start timing
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const authStateChangedTime = performance.now();
+      console.log(`AuthContext: onAuthStateChanged fired at ${authStateChangedTime.toFixed(2)}ms. User:`, firebaseUser ? firebaseUser.uid : null);
       setUser(firebaseUser);
+      
       if (firebaseUser) {
-        await handleUserInFirestore(firebaseUser);
+        console.log("AuthContext: User logged in, starting Firestore operation.");
+        try {
+          await handleUserInFirestore(firebaseUser);
+        } catch (error) {
+           console.error("AuthContext: Error in handleUserInFirestore within onAuthStateChanged", error);
+        }
       }
+      
+      const endTime = performance.now(); // End timing
+      console.log("AuthContext: Setting loading to false.");
       setLoading(false);
       setAuthError(null);
+      console.log(`AuthContext: Loading transition finished at ${endTime.toFixed(2)}ms. Total time: ${(endTime - startTime).toFixed(2)}ms`);
     });
-    return () => unsubscribe();
+    return () => {
+      console.log("AuthContext: Cleaning up onAuthStateChanged listener.");
+      unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string): Promise<UserCredential | void> => {
     setLoading(true);
     setAuthError(null);
+    console.log("AuthContext: Attempting sign up.");
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will call handleUserInFirestore
+      console.log("AuthContext: Sign up successful.");
       return userCredential;
     } catch (error) {
+      console.error("AuthContext: Sign up error:", error);
       setAuthError(error as AuthError);
-      console.error("Sign up error:", error);
       throw error;
     } finally {
-      setLoading(false);
+      console.log("AuthContext: Sign up process finished.");
     }
   };
 
   const signIn = async (email: string, password: string): Promise<UserCredential | void> => {
     setLoading(true);
     setAuthError(null);
+    console.log("AuthContext: Attempting sign in.");
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will call handleUserInFirestore
+      console.log("AuthContext: Sign in successful.");
       return userCredential;
     } catch (error) {
+      console.error("AuthContext: Sign in error:", error);
       setAuthError(error as AuthError);
-      console.error("Sign in error:", error);
       throw error;
     } finally {
-      setLoading(false);
+       console.log("AuthContext: Sign in process finished.");
     }
   };
 
   const signInWithGoogle = async (): Promise<UserCredential | void> => {
     setLoading(true);
     setAuthError(null);
+    console.log("AuthContext: Attempting Google sign in.");
     const provider = new GoogleAuthProvider();
     try {
       const userCredential = await signInWithPopup(auth, provider);
-      // onAuthStateChanged will call handleUserInFirestore
+      console.log("AuthContext: Google sign in successful.");
       return userCredential;
     } catch (error) {
+      console.error("AuthContext: Google sign in error:", error);
       setAuthError(error as AuthError);
-      console.error("Google sign in error:", error);
       throw error;
     } finally {
-      setLoading(false);
+      console.log("AuthContext: Google sign in process finished.");
     }
   };
 
   const signOut = async () => {
     setAuthError(null);
+    console.log("AuthContext: Attempting sign out.");
     try {
       await firebaseSignOut(auth);
-      // setUser(null) handled by onAuthStateChanged
+      console.log("AuthContext: Sign out successful.");
     } catch (error) {
+      console.error("AuthContext: Error signing out:", error);
       setAuthError(error as AuthError);
-      console.error("Error signing out:", error);
       throw error;
     }
   };

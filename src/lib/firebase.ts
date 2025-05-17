@@ -72,7 +72,7 @@ export interface Project {
   ownerId: string; // UID of the user who created the project
   sharedWithUserIds: string[]; // Array of UIDs of users with whom the project is shared
   isPublic: boolean; // Whether the project is publicly viewable
-  title: string;
+  projectTitle: string;
   prompt: string;
   nodes: ProjectNodeForFirestore[];
   edges: Edge[];
@@ -80,7 +80,7 @@ export interface Project {
   updatedAt: any; // serverTimestamp() or FieldValue
 }
 
-export interface ProjectPreview extends Pick<Project, 'id' | 'title' | 'updatedAt' | 'createdAt' | 'ownerId' | 'isPublic'> {
+export interface ProjectPreview extends Pick<Project, 'id' | 'projectTitle' | 'updatedAt' | 'createdAt' | 'ownerId' | 'isPublic'> {
   nodeCount: number;
 }
 
@@ -197,7 +197,7 @@ export const getUserProjectsFromDb = async (userId: string): Promise<ProjectPrev
     const data = doc.data();
     projectsMap.set(doc.id, {
       id: doc.id,
-      title: data.title || 'Untitled Project',
+      projectTitle: data.projectTitle, // Corrected mapping
       updatedAt: data.updatedAt,
       createdAt: data.createdAt,
       ownerId: data.ownerId,
@@ -211,7 +211,7 @@ export const getUserProjectsFromDb = async (userId: string): Promise<ProjectPrev
       const data = doc.data();
       projectsMap.set(doc.id, {
         id: doc.id,
-        title: data.title || 'Untitled Project',
+        projectTitle: data.projectTitle, // Corrected mapping
         updatedAt: data.updatedAt,
         createdAt: data.createdAt,
         ownerId: data.ownerId,
