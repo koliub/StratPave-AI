@@ -16,22 +16,24 @@ import {
   orderBy,
   serverTimestamp,
   enableIndexedDbPersistence,
-  CACHE_SIZE_UNLIMITED
+  CACHE_SIZE_UNLIMITED,
+  writeBatch,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import type { Node, Edge } from 'reactflow';
 import type { WordNodeData } from '@/components/roadmap/word-node';
 
 // Your web app's Firebase configuration
 // IMPORTANT: Replace these with your actual Firebase project credentials
-// You can get these from your Firebase project settings.
 const firebaseConfig: FirebaseOptions = {
-  apiKey: "YOUR_API_KEY", // process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: "YOUR_AUTH_DOMAIN", // process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: "YOUR_PROJECT_ID", // process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: "YOUR_STORAGE_BUCKET", // process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: "YOUR_APP_ID", // process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: "YOUR_MEASUREMENT_ID" // process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID (Optional)
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
+  measurementId: "YOUR_MEASUREMENT_ID"
 };
 
 // Initialize Firebase
@@ -46,7 +48,6 @@ const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
 
 // Enable offline persistence for Firestore
-// This should be called only once, as early as possible.
 try {
     enableIndexedDbPersistence(db, { cacheSizeBytes: CACHE_SIZE_UNLIMITED })
       .then(() => {
@@ -67,7 +68,7 @@ try {
   
 
 // Firestore data types
-export interface RoadmapNodeDataForFirestore extends Omit<WordNodeData, 
+export interface ProjectNodeDataForFirestore extends Omit<WordNodeData, 
   'onToggleDone' | 
   'onUpdateNodeData' | 
   'onDeleteNode' | 
@@ -75,36 +76,36 @@ export interface RoadmapNodeDataForFirestore extends Omit<WordNodeData,
   'onManualToggleExpansion' |
   'onUpdateNodeColor' |
   'onGenerateSubRoadmap' |
-  'subRoadmapNodes' | // Avoid deep nesting if subRoadmapNodes also have callbacks
-  'subRoadmapEdges'   // Keep subRoadmapEdges simple
+  'subRoadmapNodes' | 
+  'subRoadmapEdges'
 > {
   // Add any specific Firestore-only fields if needed
 }
 
-export interface RoadmapNodeForFirestore extends Omit<Node<RoadmapNodeDataForFirestore>, 'data'> {
-  data: RoadmapNodeDataForFirestore;
+export interface ProjectNodeForFirestore extends Omit<Node<ProjectNodeDataForFirestore>, 'data'> {
+  data: ProjectNodeDataForFirestore;
 }
 
-export interface Roadmap {
+export interface Project {
   id?: string; // ID from Firestore, optional if new
-  userId: string;
+  ownerId: string; // UID of the user who created the project
+  sharedWithUserIds: string[]; // Array of UIDs of users with whom the project is shared
+  isPublic: boolean; // Whether the project is publicly viewable
   title: string;
   prompt: string;
-  nodes: RoadmapNodeForFirestore[];
+  nodes: ProjectNodeForFirestore[];
   edges: Edge[];
   createdAt: any; // serverTimestamp() or FieldValue
   updatedAt: any; // serverTimestamp() or FieldValue
-  isPublic?: boolean; // Optional: for sharing later
 }
 
-export interface RoadmapPreview extends Pick<Roadmap, 'id' | 'title' | 'updatedAt' | 'createdAt'> {
-  // Any other preview-specific fields
+export interface ProjectPreview extends Pick<Project, 'id' | 'title' | 'updatedAt' | 'createdAt' | 'ownerId' | 'isPublic'> {
   nodeCount: number;
 }
 
 
 // Utility to strip callbacks from WordNodeData for Firestore
-export const toFirestoreNodeData = (nodeData: WordNodeData): RoadmapNodeDataForFirestore => {
+export const toFirestoreNodeData = (nodeData: WordNodeData): ProjectNodeDataForFirestore => {
   const { 
     onToggleDone, 
     onUpdateNodeData, 
@@ -113,22 +114,17 @@ export const toFirestoreNodeData = (nodeData: WordNodeData): RoadmapNodeDataForF
     onManualToggleExpansion,
     onUpdateNodeColor,
     onGenerateSubRoadmap,
-    subRoadmapNodes, // These might need special handling if they also contain callbacks or are deeply nested
+    subRoadmapNodes, 
     subRoadmapEdges,
     ...restOfData 
   } = nodeData;
   
-  // For now, we're not storing subRoadmapNodes/Edges directly in this simplified version
-  // to avoid deep nesting issues with callbacks. You might store them as separate documents
-  // or handle their serialization/deserialization carefully if needed.
   return {
     ...restOfData,
-    // If subRoadmapNodes/Edges are simple data (no callbacks), you can include them.
-    // Otherwise, they might need their own toFirestore conversion.
   };
 };
 
-export const toFirestoreNodes = (nodes: Node<WordNodeData>[]): RoadmapNodeForFirestore[] => {
+export const toFirestoreNodes = (nodes: Node<WordNodeData>[]): ProjectNodeForFirestore[] => {
   return nodes.map(node => ({
     ...node,
     data: toFirestoreNodeData(node.data),
@@ -137,21 +133,28 @@ export const toFirestoreNodes = (nodes: Node<WordNodeData>[]): RoadmapNodeForFir
 
 
 // Firestore service functions
-export const saveRoadmapToDb = async (userId: string, roadmapId: string | null, roadmapData: Omit<Roadmap, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  if (!userId) throw new Error("User ID is required to save roadmap.");
+export const saveProjectToDb = async (userId: string, projectId: string | null, projectData: Omit<Project, 'id' | 'ownerId' | 'sharedWithUserIds' | 'isPublic' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  if (!userId) throw new Error("User ID is required to save project.");
   
-  const roadmapCollectionRef = collection(db, `users/${userId}/roadmaps`);
+  const projectCollectionRef = collection(db, `projects`);
   let docRef;
 
-  if (roadmapId) {
-    docRef = doc(roadmapCollectionRef, roadmapId);
-    await setDoc(docRef, { ...roadmapData, updatedAt: serverTimestamp() }, { merge: true });
-    return roadmapId;
+  if (projectId) {
+    docRef = doc(projectCollectionRef, projectId);
+    // Before updating, ensure the user has permission (is owner)
+    const existingProjectSnap = await getDoc(docRef);
+    if (existingProjectSnap.exists() && existingProjectSnap.data().ownerId !== userId) {
+      throw new Error("User does not have permission to update this project.");
+    }
+    await setDoc(docRef, { ...projectData, updatedAt: serverTimestamp() }, { merge: true });
+    return projectId;
   } else {
-    docRef = doc(roadmapCollectionRef); // Firestore generates new ID
+    docRef = doc(projectCollectionRef); // Firestore generates new ID
     await setDoc(docRef, { 
-      ...roadmapData, 
-      userId,
+      ...projectData, 
+      ownerId: userId,
+      sharedWithUserIds: [],
+      isPublic: false,
       createdAt: serverTimestamp(), 
       updatedAt: serverTimestamp() 
     });
@@ -159,43 +162,145 @@ export const saveRoadmapToDb = async (userId: string, roadmapId: string | null, 
   }
 };
 
-export const getRoadmapFromDb = async (userId: string, roadmapId: string): Promise<Roadmap | null> => {
-  if (!userId || !roadmapId) return null;
-  const roadmapDocRef = doc(db, `users/${userId}/roadmaps/${roadmapId}`);
-  const roadmapSnap = await getDoc(roadmapDocRef);
+export const getProjectFromDb = async (currentUserId: string | null, projectId: string): Promise<Project | null> => {
+  if (!projectId) return null;
+  const projectDocRef = doc(db, `projects/${projectId}`);
+  const projectSnap = await getDoc(projectDocRef);
 
-  if (roadmapSnap.exists()) {
-    return { id: roadmapSnap.id, ...roadmapSnap.data() } as Roadmap;
+  if (projectSnap.exists()) {
+    const projectData = { id: projectSnap.id, ...projectSnap.data() } as Project;
+    // Access control: public, owner, or shared with
+    if (projectData.isPublic || (currentUserId && (projectData.ownerId === currentUserId || projectData.sharedWithUserIds.includes(currentUserId)))) {
+      return projectData;
+    } else {
+      console.warn("User does not have permission to access this project or project is not public.");
+      return null; // Or throw an error
+    }
   } else {
-    console.log("No such roadmap!");
+    console.log("No such project!");
     return null;
   }
 };
 
-export const getUserRoadmapsFromDb = async (userId: string): Promise<RoadmapPreview[]> => {
+export const getUserProjectsFromDb = async (userId: string): Promise<ProjectPreview[]> => {
   if (!userId) return [];
-  const roadmapsCollectionRef = collection(db, `users/${userId}/roadmaps`);
-  const q = query(roadmapsCollectionRef, orderBy("updatedAt", "desc"));
+  const projectsCollectionRef = collection(db, `projects`);
   
-  const querySnapshot = await getDocs(q);
-  const roadmaps: RoadmapPreview[] = [];
-  querySnapshot.forEach((doc) => {
+  const ownedQuery = query(projectsCollectionRef, where("ownerId", "==", userId));
+  const sharedQuery = query(projectsCollectionRef, where("sharedWithUserIds", "array-contains", userId));
+  
+  const [ownedSnapshot, sharedSnapshot] = await Promise.all([
+    getDocs(ownedQuery),
+    getDocs(sharedQuery)
+  ]);
+
+  const projectsMap = new Map<string, ProjectPreview>();
+
+  ownedSnapshot.forEach((doc) => {
     const data = doc.data();
-    roadmaps.push({
+    projectsMap.set(doc.id, {
       id: doc.id,
-      title: data.title || 'Untitled Roadmap',
+      title: data.title || 'Untitled Project',
       updatedAt: data.updatedAt,
       createdAt: data.createdAt,
+      ownerId: data.ownerId,
+      isPublic: data.isPublic,
       nodeCount: data.nodes?.length || 0,
     });
   });
-  return roadmaps;
+
+  sharedSnapshot.forEach((doc) => {
+    if (!projectsMap.has(doc.id)) { // Avoid duplicates if user is owner and also in sharedWith
+      const data = doc.data();
+      projectsMap.set(doc.id, {
+        id: doc.id,
+        title: data.title || 'Untitled Project',
+        updatedAt: data.updatedAt,
+        createdAt: data.createdAt,
+        ownerId: data.ownerId,
+        isPublic: data.isPublic,
+        nodeCount: data.nodes?.length || 0,
+      });
+    }
+  });
+  
+  // Sort projects by updatedAt descending
+  return Array.from(projectsMap.values()).sort((a, b) => {
+    const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+    const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+    return timeB - timeA;
+  });
 };
 
-export const deleteRoadmapFromDb = async (userId: string, roadmapId: string): Promise<void> => {
-  if (!userId || !roadmapId) throw new Error("User ID and Roadmap ID are required to delete roadmap.");
-  const roadmapDocRef = doc(db, `users/${userId}/roadmaps/${roadmapId}`);
-  await deleteDoc(roadmapDocRef);
+export const deleteProjectFromDb = async (userId: string, projectId: string): Promise<void> => {
+  if (!userId || !projectId) throw new Error("User ID and Project ID are required to delete project.");
+  
+  const projectDocRef = doc(db, `projects/${projectId}`);
+  const projectSnap = await getDoc(projectDocRef);
+
+  if (projectSnap.exists()) {
+    if (projectSnap.data().ownerId === userId) {
+      await deleteDoc(projectDocRef);
+    } else {
+      throw new Error("User does not have permission to delete this project.");
+    }
+  } else {
+    console.warn("Project not found for deletion.");
+  }
 };
+
+// --- Collaboration functions (skeletons for now) ---
+export const shareProjectWithUser = async (ownerId: string, projectId: string, targetUserEmail: string): Promise<void> => {
+  // 1. Find targetUser UID by email (requires a users collection where emails are stored, or a Cloud Function)
+  // For simplicity, this is a placeholder. In a real app, you'd query your 'users' collection.
+  // const usersRef = collection(db, 'users');
+  // const q = query(usersRef, where("email", "==", targetUserEmail));
+  // const querySnapshot = await getDocs(q);
+  // if (querySnapshot.empty) throw new Error("User with that email not found.");
+  // const targetUserId = querySnapshot.docs[0].id;
+
+  // For now, let's assume targetUserId is known or passed directly
+  const targetUserId = "PLACEHOLDER_TARGET_USER_ID"; // Replace with actual lookup
+
+  const projectDocRef = doc(db, `projects/${projectId}`);
+  const projectSnap = await getDoc(projectDocRef);
+
+  if (!projectSnap.exists() || projectSnap.data().ownerId !== ownerId) {
+    throw new Error("Project not found or user is not the owner.");
+  }
+  if (ownerId === targetUserId) {
+    throw new Error("Cannot share project with yourself.");
+  }
+
+  await updateDoc(projectDocRef, {
+    sharedWithUserIds: arrayUnion(targetUserId)
+  });
+};
+
+export const unshareProjectWithUser = async (ownerId: string, projectId: string, targetUserId: string): Promise<void> => {
+  const projectDocRef = doc(db, `projects/${projectId}`);
+  const projectSnap = await getDoc(projectDocRef);
+
+  if (!projectSnap.exists() || projectSnap.data().ownerId !== ownerId) {
+    throw new Error("Project not found or user is not the owner.");
+  }
+
+  await updateDoc(projectDocRef, {
+    sharedWithUserIds: arrayRemove(targetUserId)
+  });
+};
+
+export const setProjectPublicStatus = async (ownerId: string, projectId: string, isPublic: boolean): Promise<void> => {
+  const projectDocRef = doc(db, `projects/${projectId}`);
+  const projectSnap = await getDoc(projectDocRef);
+
+  if (!projectSnap.exists() || projectSnap.data().ownerId !== ownerId) {
+    throw new Error("Project not found or user is not the owner.");
+  }
+  await updateDoc(projectDocRef, { isPublic });
+};
+
 
 export { app, auth, db };
+
+    
