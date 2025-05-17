@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme/theme-provider';
+import { AuthProvider } from '@/context/AuthContext'; // Import AuthProvider
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -31,10 +32,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning={true}
       >
-        <ThemeProvider defaultTheme="system" storageKey="ai-roadmap-theme">
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        <AuthProvider> {/* Wrap with AuthProvider */}
+          <ThemeProvider defaultTheme="system" storageKey="ai-roadmap-theme">
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
