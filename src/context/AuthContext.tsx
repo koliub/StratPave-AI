@@ -1,86 +1,158 @@
-// src/context/AuthContext.tsx
-"use client"; // This is a Client Component
+
+"use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getAuth, onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'; // Assuming you'll use Firestore too
-// Assuming you have your Firebase app initialized in a separate file
-// import { firebaseApp } from '../lib/firebase'; // Adjust the import path as necessary
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  User, 
+  signOut as firebaseSignOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  AuthError,
+  UserCredential
+} from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase'; // Ensure auth and db are correctly initialized and exported
 
-// Get Firebase instances (ensure firebaseApp is initialized elsewhere)
-const auth = getAuth(); // If you initialized with an app: getAuth(firebaseApp);
-const db = getFirestore(); // If you initialized with an app: getFirestore(firebaseApp);
-
-
-// Define the shape of our Auth Context
 interface AuthContextType {
-  user: User | null; // null when signed out, User object when signed in
-  loading: boolean; // true while checking auth state
-  // authError: Error | null; // Optional: Add for handling auth errors
-  signOut: () => Promise<void>; // Function to sign the user out
-  signIn: (email: string, password: string) => Promise<void>; // Added signIn function
-  signUp: (email: string, password: string) => Promise<void>; // Added signUp function
+  user: User | null;
+  loading: boolean;
+  authError: AuthError | null;
+  setAuthError: React.Dispatch<React.SetStateAction<AuthError | null>>;
+  signOut: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<UserCredential | void>;
+  signUp: (email: string, password: string) => Promise<UserCredential | void>;
+  signInWithGoogle: () => Promise<UserCredential | void>;
 }
 
-// Create the Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Create a provider component
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // Start loading as we check auth state
-  // const [authError, setAuthError] = useState<Error | null>(null); // Optional
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<AuthError | null>(null);
 
-  useEffect(() => {
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false); // Auth state is now known
-      // setAuthError(null); // Clear any previous error on state change
-    });
+  const handleUserInFirestore = async (firebaseUser: User) => {
+    if (!firebaseUser) return;
 
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []); // Empty dependency array means this effect runs only once on mount
+    const userRef = doc(db, 'users', firebaseUser.uid);
+    const userSnap = await getDoc(userRef);
 
-  // Implement the signOut function
-  const signOut = async () => {
-    try {
-      await firebaseSignOut(auth);
-      // setUser(null); // onAuthStateChanged listener will handle setting user to null
-      // setAuthError(null); // Clear errors on successful sign out
-    } catch (error: any) { // Use 'any' or a more specific type for error if known
-      console.error("Error signing out:", error);
-      // setAuthError(error); // Set error state
-      throw error; // Re-throw to allow components using signOut to catch
+    if (!userSnap.exists()) {
+      // Create new user document
+      try {
+        await setDoc(userRef, {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+          photoURL: firebaseUser.photoURL,
+          createdAt: serverTimestamp(),
+          lastLogin: serverTimestamp(),
+        });
+      } catch (error) {
+        console.error("Error creating user document in Firestore:", error);
+        // Optionally set an error state here for UI feedback
+      }
+    } else {
+      // Update existing user document (e.g., lastLogin)
+      try {
+        await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+      } catch (error) {
+        console.error("Error updating user document in Firestore:", error);
+      }
     }
   };
 
-  // Add placeholder functions for sign in/up for now
-  // You will implement these later with your chosen methods (email/password, Google, etc.)
-  const signIn = async (email: string, password: string) => {
-      console.log("Sign In called with:", email, password);
-      // Implement Firebase sign in logic here
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        await handleUserInFirestore(firebaseUser);
+      }
+      setLoading(false);
+      setAuthError(null);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const signUp = async (email: string, password: string): Promise<UserCredential | void> => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will call handleUserInFirestore
+      return userCredential;
+    } catch (error) {
+      setAuthError(error as AuthError);
+      console.error("Sign up error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const signUp = async (email: string, password: string) => {
-      console.log("Sign Up called with:", email, password);
-      // Implement Firebase sign up logic here
+  const signIn = async (email: string, password: string): Promise<UserCredential | void> => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will call handleUserInFirestore
+      return userCredential;
+    } catch (error) {
+      setAuthError(error as AuthError);
+      console.error("Sign in error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Memoize the context value to prevent unnecessary re-renders
+  const signInWithGoogle = async (): Promise<UserCredential | void> => {
+    setLoading(true);
+    setAuthError(null);
+    const provider = new GoogleAuthProvider();
+    try {
+      const userCredential = await signInWithPopup(auth, provider);
+      // onAuthStateChanged will call handleUserInFirestore
+      return userCredential;
+    } catch (error) {
+      setAuthError(error as AuthError);
+      console.error("Google sign in error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    setAuthError(null);
+    try {
+      await firebaseSignOut(auth);
+      // setUser(null) handled by onAuthStateChanged
+    } catch (error) {
+      setAuthError(error as AuthError);
+      console.error("Error signing out:", error);
+      throw error;
+    }
+  };
+
   const contextValue = React.useMemo(() => ({
     user,
     loading,
-    // authError, // Include error if added
+    authError,
+    setAuthError,
     signOut,
     signIn,
     signUp,
-  }), [user, loading, signOut, signIn, signUp]); // Add authError, signIn, signUp to deps array if included
+    signInWithGoogle,
+  }), [user, loading, authError]);
 
   return (
     <AuthContext.Provider value={contextValue}>
@@ -89,7 +161,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
-// Custom hook to consume the Auth Context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
