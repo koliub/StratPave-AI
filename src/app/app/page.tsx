@@ -47,7 +47,7 @@ function FlowCanvas() {
   const reactFlowInstance = useReactFlow();
   const searchParams = useSearchParams(); 
   const router = useRouter(); // Import useRouter
-  const projectId = searchParams.get('projectId'); // Get projectId from search params
+  const projectId = searchParams.get('id'); // Get projectId from search params
   const { user, loading: userLoading } = useAuth(); // Get user and loading state
 
   const {
