@@ -80,8 +80,11 @@ export interface Project {
   updatedAt: any; // serverTimestamp() or FieldValue
 }
 
-export interface ProjectPreview extends Pick<Project, 'id' | 'projectTitle' | 'updatedAt' | 'createdAt' | 'ownerId' | 'isPublic'> {
+export interface ProjectPreview extends Pick<Project, 'id' | 'projectTitle' | 'updatedAt' | 'createdAt' | 'ownerId' | 'isPublic'  > {
+
   nodeCount: number;
+  totalNodes: number;
+  completedNodes: number;
 }
 
 
@@ -203,6 +206,9 @@ export const getUserProjectsFromDb = async (userId: string): Promise<ProjectPrev
       ownerId: data.ownerId,
       isPublic: data.isPublic,
       nodeCount: data.nodes?.length || 0,
+      totalNodes: data.totalNodes,
+      completedNodes: data.completedNodes,
+
     });
   });
 
@@ -217,6 +223,8 @@ export const getUserProjectsFromDb = async (userId: string): Promise<ProjectPrev
         ownerId: data.ownerId,
         isPublic: data.isPublic,
         nodeCount: data.nodes?.length || 0,
+        totalNodes: data.totalNodes,
+      completedNodes: data.completedNodes,
       });
     }
   });

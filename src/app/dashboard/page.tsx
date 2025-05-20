@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { UserAuthSection } from '@/components/auth/UserAuthSection'; // Import UserAuthSection
 // Importing icons.
-import { Loader2, PlusCircle, Trash2, FileText } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, FileText, Pencil, Repeat2, EllipsisVertical} from 'lucide-react';
 // Importing hooks/contexts.
 import { useTheme } from '@/components/theme/theme-provider';
 // Importing the correct auth hook
@@ -131,6 +131,18 @@ export default function Dashboard() {
     }
   };
 
+  // Handler for sharing a project.
+  const handleShareProject = (projectId: string) => {
+    console.log('Sharing project:', projectId);
+    // TODO: Implement share project logic
+  };
+
+  // Handler for changing project title.
+  const handleChangeTitle = (projectId: string) => {
+    console.log('Changing title for project:', projectId);
+    // TODO: Implement change title logic (e.g., open a modal or inline edit)
+  };
+
   // --- UI Utility Functions Section ---
   // Helper function to format timestamp.
   const formatTimestamp = (timestamp: any) => {
@@ -197,30 +209,46 @@ export default function Dashboard() {
                         {/* Project title and delete button */}
                         <div className="flex justify-between items-center mb-2">
                           <CardTitle className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap">{project.projectTitle}</CardTitle>
-                          {/* Delete button within DropdownMenu - placed outside the Link but visually within the card */}
+                          {/* Dropdown menu for project actions (e.g., delete) */}
                           {/* To make the dropdown clickable and prevent link navigation, stop propagation */}
                           {/* The DropdownMenuTrigger needs to be clickable */}
-                          {/* Dropdown menu for project actions (e.g., delete) */}
+                          {/* Button to open the dropdown menu - placed outside the Link but visually within the card */}
+                          {/* Button needs to be relatively positioned with a higher z-index */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              {/* Button to open the dropdown menu */}
-                              {/* Button needs to be relatively positioned with a higher z-index */}
                               <Button variant="ghost" size="sm" className="relative z-10 p-1" onClick={(e) => e.stopPropagation()}> {/* Stop click propagation */}
                                 <span className="sr-only">Actions</span>
-                                {/* Delete icon */}
-                                <Trash2 className="h-4 w-4 text-red-600" />
+                                {/* Using FileText as a placeholder icon for the dropdown trigger */}
+                                <EllipsisVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             {/* Dropdown menu content */}
                             <DropdownMenuContent align="end">
-                              {/* Dropdown menu item for deleting the project */}
+                              {/* Dropdown menu item for sharing the project */}
+                              <DropdownMenuItem onClick={(e) => {
+                                e.preventDefault(); // Prevent default link behavior if any
+                                e.stopPropagation(); // Stop event from bubbling up
+                                handleShareProject(project.id!); // Call share handler
+                              }}>
+                                <Repeat2 className="h-4 w-4" /> Share 
+                              </DropdownMenuItem>
+                              {/* Dropdown menu item for changing the title */}
+                              <DropdownMenuItem onClick={(e) => {
+                                e.preventDefault(); // Prevent default link behavior if any
+                                e.stopPropagation(); // Stop event from bubbling up
+                                handleChangeTitle(project.id!); // Call change title handler
+                              }}>
+                                <Pencil className="h-4 w-4" /> Edit Title
+                              </DropdownMenuItem>
+                               {/* Dropdown menu item for deleting the project */}
                               {/* Stop propagation in MenuItem click handler as well */}
+                              
                               <DropdownMenuItem onClick={(e) => {
                                 e.preventDefault(); // Prevent default link behavior if any
                                 e.stopPropagation(); // Stop event from bubbling up to the CardContent/Link
                                 handleDeleteProject(project.id!); // Call delete handler
                               }}>
-                                Delete Project
+                                <Trash2 className="h-4 w-4" /> Delete 
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -234,9 +262,19 @@ export default function Dashboard() {
                           Last updated: {formatTimestamp(project.updatedAt)}
                         </div>
                         {/* Retain dummy progress bar structure as requested, but no dynamic value */}
-                        <Progress value={75} className="mb-2 [&>div]:bg-gradient-to-r [&>div]:from-teal-400 [&>div]:to-blue-600" />
-                         <div className="text-sm text-gray-500">
-                            75
+                        <div className="flex items-center gap-2">
+                          {/* Add bg-gray-200 for the background */}
+                          <Progress value={(project.completedNodes/project.totalNodes)*100} className="mb-2 [&>div]:bg-gradient-to-r [&>div]:from-teal-400 [&>div]:to-blue-600 bg-gray-200 dark:bg-gray-600" />
+                           {/* Add percentage text at the end */}
+                           <span className="text-sm text-gray-700 dark:text-gray-300">
+                             {((project.completedNodes/project.totalNodes)*100).toFixed(0)}%
+                           </span>
+                        </div>
+                         <div className="text-sm text-gray-500 mt-2"> {/* Added mt-2 for spacing */}
+                                                    <div className={`text-sm font-medium mb-2 inline-block px-2 py-0.5 rounded-full ${project.completedNodes === project.totalNodes && project.totalNodes > 0 ? 'bg-green-500 text-white' : 'bg-yellow-500 text-black'}`}>
+                          {project.completedNodes === project.totalNodes && project.totalNodes > 0 ? 'Completed' : 'In Progress'}
+                        </div>
+                            
                           </div>
                       </CardContent>
                     </a>
@@ -267,7 +305,7 @@ export default function Dashboard() {
                   {/* Input field for entering the roadmap title */}
                   <Input
                     type="text"
-                    placeholder="Enter roadmap title" // Placeholder for dynamic input
+                    placeholder="Enter Project Prompt" // Placeholder for dynamic input
                     value={pormptText}
                     onChange={(e) => setPrompt(e.target.value)}
                     className="flex-grow rounded-full"

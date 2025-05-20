@@ -20,7 +20,7 @@ import {
   SidebarInset,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
-import { getProjectFromDb, saveProjectToDb } from '@/lib/firebase'; // Import Firestore functions
+import { getProjectFromDb, saveProjectToDb, toFirestoreNodes } from '@/lib/firebase'; // Import Firestore functions and utility
 
 import { RoadmapSidebar } from '@/components/roadmap/RoadmapSidebar';
 import { RoadmapCanvas } from '@/components/roadmap/RoadmapCanvas';
@@ -47,8 +47,11 @@ function FlowCanvas() {
   const reactFlowInstance = useReactFlow();
   const searchParams = useSearchParams(); 
   const router = useRouter(); // Import useRouter
-  const projectId = searchParams.get('id'); // Get projectId from search params
+  const projectIdFromUrl = searchParams.get('id'); // Get projectId from search params
   const { user, loading: userLoading } = useAuth(); // Get user and loading state
+
+  // State to hold the current project ID, updated after saving a new project
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(projectIdFromUrl);
 
   const {
     nodes,
@@ -239,22 +242,39 @@ function FlowCanvas() {
   useEffect(() => {
     if (userLoading) return; // Wait for user authentication state to load
 
-    // Case 1: Load existing project if projectId exists and is not 'new'
-    if (projectId && projectId !== 'new') {
+    // Case 1: Load existing project if currentProjectId exists and is not 'new'
+    if (currentProjectId && currentProjectId !== 'new') {
       if (user?.uid) {
         if (!projectLoaded) { // Only load if not already loaded
           setIsLoading(true);
-          getProjectFromDb(user.uid, projectId)
+          getProjectFromDb(user.uid, currentProjectId) // Use currentProjectId here
             .then(projectData => {
               if (projectData) {
-                setNodes(projectData.nodes || []);
+                // Map loaded nodes to include function handlers from useNodeManagement
+                const nodesWithHandlers: Node<WordNodeData>[] = (projectData.nodes || []).map((node: any) => ({
+                  ...node,
+                  data: {
+                    ...node.data,
+                    onToggleDone: handleToggleNodeDone,
+                    onUpdateNodeData: handleUpdateNodeData,
+                    onDeleteNode: handleDeleteNode,
+                    onAddNodeAfter: handleAddNodeAfter,
+                    onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+                    onManualToggleExpansion: handleManualToggleExpansion,
+                    onUpdateNodeColor: handleUpdateNodeColor,
+                    // Ensure isDone is loaded correctly
+                    isDone: node.data.isDone || false,
+                  },
+                }));
+                
+                setNodes(nodesWithHandlers);
                 setEdges(projectData.edges || []);
                 setPromptText(projectData.prompt || '');
                 // Set project title from loaded data, or default to prompt if not present
                 setProjectTitle(projectData.projectTitle || projectData.prompt || '');
                 // Determine the highest existing node ID to set the counter
-                const maxNodeId = projectData.nodes.reduce((max: number, node: Node<WordNodeData>) => {
-                  // Assuming node IDs are in the format 'somenode_number'
+                const maxNodeId = (projectData.nodes || []).reduce((max: number, node: any) => {
+                  // Assuming node IDs are in the format 'somenode_number' or similar
                   const idParts = node.id.split('_');
                   const numberPart = parseInt(idParts[idParts.length - 1]);
                   return isNaN(numberPart) ? max : Math.max(max, numberPart);
@@ -263,13 +283,13 @@ function FlowCanvas() {
                 setProjectLoaded(true);
                 toast({
                   title: 'Project Loaded',
-                  description: `Loaded project with ID: ${projectId}`,
+                  description: `Loaded project with ID: ${currentProjectId}`,
                 });
               } else {
                 // Project not found or not accessible
                 toast({
                   title: 'Project Not Found',
-                  description: `Project with ID ${projectId} not found or you don't have access.`, 
+                  description: `Project with ID ${currentProjectId} not found or you don't have access.`, 
                   variant: 'destructive',
                 });
                 // Optionally redirect to a new project page or dashboard
@@ -300,8 +320,8 @@ function FlowCanvas() {
         router.push('/auth'); // Redirect to login page
       }
     }
-    // Case 2: New project creation or generation from prompt if no projectId or projectId is 'new' AND no project is loaded yet
-    else if ((!projectId || projectId === 'new') && !projectLoaded && !generationAttempted.current) {
+    // Case 2: New project creation or generation from prompt if no currentProjectId or currentProjectId is 'new' AND no project is loaded yet
+    else if ((!currentProjectId || currentProjectId === 'new') && !projectLoaded && !generationAttempted.current) {
       const storedPrompt = sessionStorage.getItem('roadmapPrompt');
       const initialPromptFromQuery = searchParams.get('prompt');
 
@@ -311,24 +331,24 @@ function FlowCanvas() {
         doGenerateRoadmap(storedPrompt);
         sessionStorage.removeItem('roadmapPrompt'); // Clean up sessionStorage
         generationAttempted.current = true;
-      } else if (initialPromptFromQuery && projectId === 'new') {
+      } else if (initialPromptFromQuery && (projectIdFromUrl === 'new' || !projectIdFromUrl)) { // Use projectIdFromUrl here for the initial check
         setPromptText(initialPromptFromQuery);
         setProjectTitle(initialPromptFromQuery); // Set project title from query prompt
         doGenerateRoadmap(initialPromptFromQuery);
         generationAttempted.current = true;
-      } else if (!initialPromptFromQuery && !storedPrompt && projectId === 'new') {
+      } else if (!initialPromptFromQuery && !storedPrompt && (projectIdFromUrl === 'new' || !projectIdFromUrl)) { // Use projectIdFromUrl here
         // If it's a new project with no prompt, maybe initialize an empty canvas?
         // For now, let's do nothing and wait for user input or remove the 'new' projectId
         // or redirect if this state shouldn't be reachable.
         console.log("New project requested with no prompt.");
         setProjectLoaded(true); // Consider it loaded as an empty project
-      } else if (!initialPromptFromQuery && !storedPrompt && !projectId) {
+      } else if (!initialPromptFromQuery && !storedPrompt && !projectIdFromUrl) { // Use projectIdFromUrl here
         // No project ID, no stored prompt, no query prompt - just an empty canvas
         console.log("Starting with an empty canvas.");
         setProjectLoaded(true); // Consider it loaded as an empty project
       }
     }
-  }, [projectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setProjectTitle, setNodeIdCounter, doGenerateRoadmap, searchParams]);
+  }, [currentProjectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setProjectTitle, setNodeIdCounter, doGenerateRoadmap, searchParams, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, handleGenerateSubRoadmapPrompt, handleManualToggleExpansion, handleUpdateNodeColor, projectIdFromUrl]); // Add currentProjectId and projectIdFromUrl to deps
 
 
   const handleNodeSelectFromSidebar = (nodeId: string) => {
@@ -367,41 +387,33 @@ function FlowCanvas() {
 
     setIsLoading(true);
     try {
-      // Create a clean object for node data, excluding functions
-      const nodesToSave = nodes.map(node => {
-        const dataToSave: Partial<WordNodeData> = {};
-        for (const key in node.data) {
-          // Check if the property is not a function before including it
-          if (typeof (node.data as any)[key] !== 'function') {
-            (dataToSave as any)[key] = (node.data as any)[key];
-          }
-        }
+      // Use the utility function to convert nodes to the Firestore format
+      const nodesForFirestore = toFirestoreNodes(nodes);
 
-        // Preserve other node properties like id, type, position
-        const { data, ...restNodeProps } = node;
-
-        return {
-          ...restNodeProps,
-          data: dataToSave,
-        };
-      });
+      // Calculate total and completed nodes
+      const totalNodes = nodes.length;
+      const completedNodes = nodes.filter(node => node.data.isDone).length;
 
       const projectToSave = {
-        nodes: nodesToSave,
+        nodes: nodesForFirestore,
         edges: edges,
         prompt: promptText,
         projectTitle: projectTitle, // Save the separate project title
+        totalNodes: totalNodes, // Save total nodes
+        completedNodes: completedNodes, // Save completed nodes
       };
 
-      const savedProjectId = await saveProjectToDb(user.uid, projectId || null, projectToSave);
+      // Use currentProjectId for saving
+      const savedProjectId = await saveProjectToDb(user.uid, currentProjectId || null, projectToSave);
 
       toast({
         title: 'Project Saved',
         description: 'Your roadmap has been saved.',
       });
 
-      // If it was a new project, navigate to the URL with the new ID
-      if (projectId === 'new' && savedProjectId) {
+      // If it was a new project (based on the state before saving), update currentProjectId and navigate
+      if ((!currentProjectId || currentProjectId === 'new') && savedProjectId) {
+        setCurrentProjectId(savedProjectId); // Update state with the new ID
         router.replace(`/app?projectId=${savedProjectId}`);
       }
 
@@ -418,7 +430,7 @@ function FlowCanvas() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, projectId, nodes, edges, promptText, projectTitle, toast, router]); // Added projectTitle to deps
+  }, [user, currentProjectId, nodes, edges, promptText, projectTitle, toast, router]); // Added currentProjectId to deps and removed projectId
 
 
   return (
@@ -434,7 +446,7 @@ function FlowCanvas() {
         <ProjectHeader
           projectTitle={projectTitle} // Use projectTitle state for display
           nodes={nodes}
-          projectId={projectId || 'new'} // Pass projectId to header
+          projectId={currentProjectId || 'new'} // Pass currentProjectId to header
           onExpandAll={handleExpandAllNodes}
           onCollapseAll={handleCollapseAllNodes}
           isMiniMapVisible={isMiniMapVisible}

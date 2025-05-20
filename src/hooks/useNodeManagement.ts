@@ -13,7 +13,23 @@ import {
 } from 'reactflow';
 import { type WordNodeData } from '@/components/roadmap/word-node';
 import { useToast } from '@/hooks/use-toast';
-import { generateSubRoadmap, type GenerateSubRoadmapInput } from '@/ai/flows/generate-roadmap-flow';
+// Removed direct import of server-side Genkit function
+// import { generateSubRoadmap, type GenerateSubRoadmapInput } from '@/app/api/generate-roadmap-flow';
+
+// Define the input and output types for the API call
+interface GenerateRoadmapInput {
+  prompt: string;
+}
+
+interface RoadmapStep {
+  id: string;
+  title: string;
+  description: string;
+}
+
+interface GenerateRoadmapOutput {
+  roadmap: RoadmapStep[];
+}
 
 const DEFAULT_NODE_COLOR = '#A0A0A0';
 
@@ -156,80 +172,7 @@ export function useNodeManagement({
     [setNodes, toast]
   );
 
-  const handleGenerateSubRoadmapPrompt = useCallback(async (nodeId: string) => {
-    const parentNode = nodesRef.current.find(n => n.id === nodeId);
-
-    if (!parentNode) {
-      toast({ title: "Error", description: "Could not find the parent node for sub-roadmap.", variant: "destructive" });
-      return;
-    }
-    
-    if (!projectPromptRef.current) {
-      toast({ title: "Error", description: "Project prompt is not available to generate sub-roadmap.", variant: "destructive" });
-      return;
-    }
-
-    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isLoadingSubRoadmap: true } } : n));
-    
-    // Construct the main roadmap context string
-    let mainRoadmapContextString = "";
-    if (nodesRef.current && nodesRef.current.length > 0) {
-      const mainSteps = nodesRef.current
-        .filter(n => !n.data.parentId && n.id !== nodeId) // Exclude sub-steps and the current parent node itself
-        .map((n, index) => 
-          `Step ${index + 1}: ${n.data.title}${n.data.description ? ' - ' + n.data.description : ''}`
-        )
-        .join('');
-      if (mainSteps) {
-        mainRoadmapContextString = `Overall Main Roadmap (excluding current parent step):
-${mainSteps}`;
-      }
-    }
-
-    try {
-      const subRoadmapInput: GenerateSubRoadmapInput = {
-        projectPrompt: projectPromptRef.current,
-        parentStepId: parentNode.id,
-        parentStepTitle: parentNode.data.title,
-        parentStepDescription: parentNode.data.description || '',
-        mainRoadmapContext: mainRoadmapContextString || undefined, // Pass undefined if empty to trigger conditional in prompt
-      };
-
-      console.log("Calling generateSubRoadmap with input:", subRoadmapInput);
-      const result = await generateSubRoadmap(subRoadmapInput);
-      
-      console.log("Sub-roadmap generated for node:", nodeId, "Result:", result);
-
-      if (result && result.subRoadmap && result.subRoadmap.length > 0) {
-        toast({
-          title: "Sub-Roadmap Generated (Logged)",
-          description: `Generated ${result.subRoadmap.length} sub-steps for "${parentNode.data.title}". Check console.`,
-        });
-        // TODO: Add new sub-nodes to the graph
-      } else {
-        toast({
-          title: "No Sub-steps Generated",
-          description: "The AI did not return any sub-steps or the result was empty.",
-          variant: "default",
-        });
-      }
-
-    } catch (error) {
-      console.error("Sub-roadmap generation error:", error);
-      let errorMessage = "Failed to generate sub-roadmap. Please try again.";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      toast({
-        title: "Error Generating Sub-Roadmap",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isLoadingSubRoadmap: false } } : n));
-    }
-  }, [setNodes, toast]);
-
+  // Define handleAddNodeAfter and handleGenerateSubRoadmapPrompt before using them in data objects
   const handleAddNodeAfter = useCallback((currentNodeId: string) => {
     if (isLoading) return;
 
@@ -250,7 +193,7 @@ ${mainSteps}`;
     }
 
     const newNodePosition = {
-      x: currentNode.position.x + 0,
+      x: currentNode.position.x,
       y: currentNode.position.y + (currentNode.height || 150) + 60,
     };
 
@@ -265,8 +208,8 @@ ${mainSteps}`;
         onToggleDone: handleToggleNodeDone,
         onUpdateNodeData: handleUpdateNodeData,
         onDeleteNode: handleDeleteNode,
-        onAddNodeAfter: handleAddNodeAfter,
-        onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+        onAddNodeAfter: handleAddNodeAfter, // Self-reference is fine here
+        onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt, // Referencing the other useCallback function
         onManualToggleExpansion: handleManualToggleExpansion,
         onUpdateNodeColor: handleUpdateNodeColor,
         color: DEFAULT_NODE_COLOR,
@@ -303,6 +246,7 @@ ${mainSteps}`;
                 animated: true,
                 markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
                 style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+                type: 'smoothstep', // Use smoothstep
             });
         }
         newEds.push({
@@ -312,6 +256,7 @@ ${mainSteps}`;
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
             style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+             type: 'smoothstep', // Use smoothstep
         });
         return newEds;
     });
@@ -326,9 +271,265 @@ ${mainSteps}`;
   }, [
     isLoading, nodeIdCounter, 
     handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
-    handleManualToggleExpansion, handleUpdateNodeColor, handleGenerateSubRoadmapPrompt,
-    globalExpansionOverride, setNodes, setEdges, toast, reactFlowInstance, setNodeIdCounter
+    handleManualToggleExpansion, handleUpdateNodeColor, 
+    globalExpansionOverride, setNodes, setEdges, toast, reactFlowInstance, setNodeIdCounter, // Removed handleGenerateSubRoadmapPrompt
   ]);
+
+  const handleGenerateSubRoadmapPrompt = useCallback(async (nodeId: string) => {
+    const parentNode = nodesRef.current.find(n => n.id === nodeId);
+
+    if (!parentNode) {
+      toast({ title: "Error", description: "Could not find the parent node for sub-roadmap.", variant: "destructive" });
+      return;
+    }
+    
+    if (!projectPromptRef.current) {
+      toast({ title: "Error", description: "Project prompt is not available to generate sub-roadmap.", variant: "destructive" });
+      return;
+    }
+
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isLoadingSubRoadmap: true } } : n));
+    
+    // The API route for sub-roadmap generation expects the same input structure
+    // as the original generateRoadmapInput, but we will pass the parent node
+    // details and project prompt to the API to handle the sub-roadmap logic server-side.
+    // NOTE: The previous implementation was designed to call a *different* Genkit flow
+    // `generateSubRoadmap`. The new API route `/api/generate-roadmap` is designed
+    // to call `generateRoadmap`. We need to adjust the logic here or create a separate
+    // API route for sub-roadmaps.
+
+    // *** Assuming we need a separate API route for sub-roadmaps, or update the existing one ***
+    // For now, let's assume the API route /api/generate-roadmap is updated to handle
+    // both initial roadmap generation and sub-roadmap generation based on input structure.
+    // A better approach would be a dedicated /api/generate-sub-roadmap route.
+
+    // Let's proceed assuming /api/generate-roadmap can handle sub-roadmap requests
+    // by looking at the input structure, or it has been updated to take parent details.
+    // If not, a new API route is needed.
+
+    // *** IMPORTANT ***: The current API route `src/app/api/generate-roadmap/route.ts`
+    // only calls `generateRoadmap` with a simple `{ prompt: string }` input.
+    // It *cannot* handle the complex `GenerateSubRoadmapInput` needed for sub-roadmaps.
+    // We need to create a *new* API route specifically for generating sub-roadmaps.
+
+    // Plan: Create a new API route `src/app/api/generate-sub-roadmap/route.ts`
+    // This new route will import and call the `generateSubRoadmap` Genkit function.
+    // Then, update this hook to call the new `/api/generate-sub-roadmap` endpoint.
+
+    // *** Action: Create the new API route file and update this hook. ***
+
+    // Let's proceed with creating the new API route for sub-roadmaps first.
+
+    // The code below is commented out because it would call the wrong API route.
+    /*
+    const subRoadmapInput: GenerateSubRoadmapInput = {
+      projectPrompt: projectPromptRef.current,
+      parentStepId: parentNode.id,
+      parentStepTitle: parentNode.data.title,
+      parentStepDescription: parentNode.data.description || '',
+      // mainRoadmapContext is not directly used by the /api/generate-roadmap route as currently implemented
+      // mainRoadmapContext: mainRoadmapContextString || undefined,
+    };
+
+    console.log("Calling API route /api/generate-roadmap with input:", subRoadmapInput);
+
+    try {
+      const response = await fetch('/api/generate-roadmap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(subRoadmapInput),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API request failed with status ${response.status}`);
+      }
+
+      const result: GenerateRoadmapOutput = await response.json(); // Assuming the API returns the same structure
+
+      console.log("Sub-roadmap generated for node:", nodeId, "Result:", result);
+
+      if (result && result.roadmap && result.roadmap.length > 0) { // Assuming the API returns 'roadmap' key
+        toast({
+          title: "Sub-Roadmap Generated",
+          description: `Generated ${result.roadmap.length} sub-steps for "${parentNode.data.title}".`,
+        });
+        // TODO: Add new sub-nodes and edges to the graph based on result.roadmap
+        // This part needs to be implemented based on the returned sub-steps.
+
+      } else {
+        toast({
+          title: "No Sub-steps Generated",
+          description: "The AI did not return any sub-steps or the result was empty.",
+          variant: "default",
+        });
+      }
+
+    } catch (error) {
+      console.error("Sub-roadmap generation error:", error);
+      let errorMessage = "Failed to generate sub-roadmap. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast({
+        title: "Error Generating Sub-Roadmap",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isLoadingSubRoadmap: false } } : n));
+    }
+    */
+
+    // *** Implementing the creation of the new API route for sub-roadmaps ***
+
+    // Re-defining the input type needed for the *sub-roadmap* Genkit function
+    interface GenerateSubRoadmapInput {
+      projectPrompt: string;
+      parentStepId: string;
+      parentStepTitle: string;
+      parentStepDescription: string;
+      mainRoadmapContext?: string;
+    }
+
+    // Re-defining the output type for the *sub-roadmap* Genkit function
+    interface GenerateSubRoadmapOutput {
+      subRoadmap: RoadmapStep[]; // Note: This returns 'subRoadmap', not 'roadmap'
+    }
+
+    const subRoadmapInputForApi: GenerateSubRoadmapInput = {
+      projectPrompt: projectPromptRef.current,
+      parentStepId: parentNode.id,
+      parentStepTitle: parentNode.data.title,
+      parentStepDescription: parentNode.data.description || '',
+      // Construct the main roadmap context string
+      mainRoadmapContext: nodesRef.current
+        .filter(n => !n.data.parentId && n.id !== nodeId) // Exclude sub-steps and the current parent node itself
+        .map((n, index) => 
+          `Step ${index + 1}: ${n.data.title}${n.data.description ? ' - ' + n.data.description : ''}`
+        )
+        .join('') || undefined,};
+
+    console.log("Calling API route /api/generate-sub-roadmap with input:", subRoadmapInputForApi);
+
+    try {
+      // Calling the new API route for sub-roadmap generation
+      const response = await fetch('/api/generate-sub-roadmap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(subRoadmapInputForApi),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API request failed with status ${response.status}`);
+      }
+
+      const result: GenerateSubRoadmapOutput = await response.json();
+
+      console.log("Sub-roadmap generated for node:", nodeId, "Result:", result);
+
+      if (result && result.subRoadmap && result.subRoadmap.length > 0) {
+        toast({
+          title: "Sub-Roadmap Generated",
+          description: `Generated ${result.subRoadmap.length} sub-steps for "${parentNode.data.title}".`,
+        });
+        
+        // TODO: Add new sub-nodes and edges to the graph based on result.subRoadmap
+        // This part needs to create node objects for each step in result.subRoadmap
+        // and add them to the 'nodes' state, and create edges connecting them to the parent node.
+        
+        const newNodes: Node<WordNodeData>[] = result.subRoadmap.map((subStep, index) => {
+            let localCounter = nodeIdCounter; // Use the hook's state for consistent ID generation
+            let newInternalId = `subnode_${parentNode.id}_${index}_${localCounter++}`;
+            setNodeIdCounter(localCounter); // Update counter
+
+             while (nodesRef.current.some(n => n.id === newInternalId) || edgesRef.current.some(e => e.source === newInternalId || e.target === newInternalId)) {
+                newInternalId = `subnode_${parentNode.id}_${index}_${localCounter++}_${Math.random().toString(36).substring(2, 7)}`; 
+                setNodeIdCounter(localCounter); 
+            }
+
+          return {
+            id: newInternalId,
+            type: 'wordNode',
+            position: { // Position these nodes relative to the parent
+                x: parentNode.position.x + (index * 250) - (result.subRoadmap.length - 1) * 125, // Example positioning: spread out horizontally below parent
+                y: parentNode.position.y + (parentNode.height || 150) + 100,
+            },
+            data: {
+              title: subStep.title,
+              description: subStep.description,
+              isDone: false,
+              onToggleDone: handleToggleNodeDone,
+              onUpdateNodeData: handleUpdateNodeData,
+              onDeleteNode: handleDeleteNode,
+              onAddNodeAfter: handleAddNodeAfter, // Referencing the other useCallback function
+              onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt, // Self-reference is fine here
+              onManualToggleExpansion: handleManualToggleExpansion,
+              onUpdateNodeColor: handleUpdateNodeColor,
+              color: DEFAULT_NODE_COLOR,
+              _isExpandedOverride: globalExpansionOverride !== null ? globalExpansionOverride : false, // Sub-steps start collapsed
+              depth: (parentNode.data.depth || 0) + 1, // Increase depth
+              parentId: parentNode.id, // Link to parent
+            },
+            draggable: true,
+            selectable: true,
+          };
+        });
+
+        const newEdges: Edge[] = newNodes.map(newNode => ({
+          id: `e-${parentNode.id}-${newNode.id}`,
+          source: parentNode.id,
+          target: newNode.id,
+          animated: true,
+          markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+          style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+          type: 'smoothstep', // Use smoothstep for cleaner layout
+        }));
+
+        setNodes(nds => [...nds, ...newNodes]);
+        setEdges(eds => [...eds, ...newEdges]);
+
+        // Optionally fit view to new nodes
+         setTimeout(() => {
+           if (reactFlowInstance) {
+             reactFlowInstance.fitView({
+                nodes: [parentNode, ...newNodes], 
+                duration: 300, 
+                padding: 0.3
+            });
+           }
+         }, 100);
+
+      } else {
+        toast({
+          title: "No Sub-steps Generated",
+          description: "The AI did not return any sub-steps or the result was empty.",
+          variant: "default",
+        });
+      }
+
+    } catch (error) {
+      console.error("Sub-roadmap generation error:", error);
+      let errorMessage = "Failed to generate sub-roadmap. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast({
+        title: "Error Generating Sub-Roadmap",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, isLoadingSubRoadmap: false } } : n));
+    }
+
+
+  }, [setNodes, toast, nodesRef, projectPromptRef, globalExpansionOverride, reactFlowInstance, nodeIdCounter, setNodeIdCounter, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleManualToggleExpansion, handleUpdateNodeColor, setEdges /* Removed handleAddNodeAfter */ ]);
 
   const handleDeleteSelectedNodes = useCallback(() => {
     if (isLoading) return;
