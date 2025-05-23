@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
 import {
   type Node,
   type Edge,
@@ -474,9 +474,11 @@ function FlowCanvas() {
 
 export default function ProjectPage() {
   return (
-    <ReactFlowProvider>
-      <FlowCanvas />
-    </ReactFlowProvider>
+    <Suspense fallback={<div>Chargement...</div>}>
+      <ReactFlowProvider>
+        <FlowCanvas />
+      </ReactFlowProvider>
+    </Suspense>
   );
 }
 
