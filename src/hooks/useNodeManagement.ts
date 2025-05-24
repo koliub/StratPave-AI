@@ -11,7 +11,7 @@ import {
   type ReactFlowInstance,
   MarkerType,
 } from 'reactflow';
-import { type WordNodeData } from '@/components/roadmap/word-node';
+import { type WordNodeData } from '@/app/canvas/components/word-node';
 import { useToast } from '@/hooks/use-toast';
 // Removed direct import of server-side Genkit function
 // import { generateSubRoadmap, type GenerateSubRoadmapInput } from '@/app/api/generate-roadmap-flow';

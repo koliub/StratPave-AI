@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ListTree } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Node } from 'reactflow';
-import type { WordNodeData } from '@/components/roadmap/word-node'; // Assuming WordNodeData is exported
+import type { WordNodeData } from '@/app/canvas/components/word-node'; // Assuming WordNodeData is exported
 
 interface RoadmapSidebarProps {
   nodes: Node<WordNodeData>[];

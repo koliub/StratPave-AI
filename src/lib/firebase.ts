@@ -22,7 +22,7 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import type { Node, Edge } from 'reactflow';
-import type { WordNodeData } from '@/components/roadmap/word-node';
+import type { WordNodeData } from '@/app/canvas/components/word-node';
 
 // Your web app's Firebase configuration
 // IMPORTANT: Replace these with your actual Firebase project credentials
@@ -42,6 +42,12 @@ if (!getApps().length) {
 } else {
   app = getApp(); // if already initialized, use that one
 }
+
+// Initialize the Gemini Developer API backend service
+
+
+// Create a `GenerativeModel` instance with a model that supports your use case
+
 
 const auth: Auth = getAuth(app);
 

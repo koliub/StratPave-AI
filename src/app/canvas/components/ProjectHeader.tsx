@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/theme/theme-toggle';
 //import { UserAuthSection } from '@/components/UserAuthSection';
 import { Loader2, Maximize, Minimize, MapIcon, HomeIcon, SaveIcon } from 'lucide-react';
 import { type Node } from 'reactflow';
-import { type WordNodeData } from '@/components/roadmap/word-node';
+import { type WordNodeData } from '@/app/canvas/components/word-node';
 
 interface ProjectHeaderProps {
   projectTitle: string;

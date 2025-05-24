@@ -101,7 +101,7 @@ export default function Dashboard() {
       sessionStorage.setItem('roadmapPrompt', pormptText);
       console.log('Creating roadmap:', pormptText);
       // Navigate to the /app page.
-      router.push('/app');
+      router.push('/canvas');
       // Clear the input field.
       setPrompt('');
     } else {
@@ -202,7 +202,7 @@ export default function Dashboard() {
                 <Card key={project.id} className="mb-4 w-full transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 ">
                   {/* Link wrapping the card content to navigate to the project page */}
                   {/* Wrap CardContent in Link to make the card clickable, except for the dropdown */}
-                  <Link href={`/app?id=${project.id}`} passHref legacyBehavior>
+                  <Link href={`/canvas?id=${project.id}`} passHref legacyBehavior>
                     {/* legacyBehavior is needed if the child is not an <a> tag */}
                     <a className="block">
                       <CardContent className="p-4 cursor-pointer">

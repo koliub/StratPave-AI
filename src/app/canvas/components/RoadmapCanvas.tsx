@@ -14,7 +14,7 @@ import ReactFlow, {
   BackgroundVariant,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import type { WordNodeData } from '@/components/roadmap/word-node'; 
+import type { WordNodeData } from '@/app/canvas/components/word-node'; 
 
 interface RoadmapCanvasProps {
   nodes: Node<WordNodeData>[];

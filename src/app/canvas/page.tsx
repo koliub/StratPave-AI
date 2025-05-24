@@ -12,8 +12,8 @@ import {
 import 'reactflow/dist/style.css';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { WordNode, type WordNodeData } from '@/components/roadmap/word-node';
-import { generateRoadmap } from '@/ai/flows/generate-roadmap-flow';
+import { WordNode, type WordNodeData } from '@/app/canvas/components/word-node';
+import { generateRoadmap } from '@/ai/tets';
 import { useToast } from '@/hooks/use-toast';
 import {
   SidebarProvider,
@@ -22,9 +22,9 @@ import {
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { getProjectFromDb, saveProjectToDb, toFirestoreNodes } from '@/lib/firebase'; // Import Firestore functions and utility
 
-import { RoadmapSidebar } from '@/components/roadmap/RoadmapSidebar';
-import { RoadmapCanvas } from '@/components/roadmap/RoadmapCanvas';
-import { ProjectHeader } from '@/components/roadmap/ProjectHeader';
+import { RoadmapSidebar } from '@/app/canvas/components/RoadmapSidebar';
+import { RoadmapCanvas } from '@/app/canvas/components/RoadmapCanvas';
+import { ProjectHeader } from '@/app/canvas/components/ProjectHeader';
 import { useNodeManagement } from '@/hooks/useNodeManagement';
 
 const nodeTypes: NodeTypes = {
@@ -96,42 +96,45 @@ function FlowCanvas() {
       });
       return;
     }
+    {/* loading*/}{
+      setIsLoading(true);
+      setSelectedNodeIdFromSidebar(null); 
+      setGlobalExpansionOverride(null);
+      
+      let currentTempNodeIdCounter = nodeIdCounter;
+      const tempLoadingNodeId = `loading_node_${currentTempNodeIdCounter}`;
+      currentTempNodeIdCounter++;
 
-    setIsLoading(true);
-    setSelectedNodeIdFromSidebar(null); 
-    setGlobalExpansionOverride(null);
-    
-    let currentTempNodeIdCounter = nodeIdCounter;
-    const tempLoadingNodeId = `loading_node_${currentTempNodeIdCounter}`;
-    currentTempNodeIdCounter++;
-
-    const tempLoadingNode: Node<WordNodeData> = {
-      id: tempLoadingNodeId,
-      type: 'wordNode',
-      position: { x: 50, y: 50 }, 
-      data: {
-        title: 'Generating Roadmap...', 
-        isLoading: true, 
-        isDone: false,
-        onToggleDone: handleToggleNodeDone,
-        onUpdateNodeData: handleUpdateNodeData,
-        onDeleteNode: handleDeleteNode,
-        onAddNodeAfter: handleAddNodeAfter,
-        onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
-        onManualToggleExpansion: handleManualToggleExpansion,
-        onUpdateNodeColor: handleUpdateNodeColor,
-      },
-      draggable: true,
-      selectable: true,
-    };
-    setNodes([tempLoadingNode]);
-    setEdges([]); 
-    setNodeIdCounter(currentTempNodeIdCounter);
+      const tempLoadingNode: Node<WordNodeData> = {
+        id: tempLoadingNodeId,
+        type: 'wordNode',
+        position: { x: 50, y: 50 }, 
+        data: {
+          title: 'Generating Roadmap...', 
+          isLoading: true, 
+          isDone: false,
+          onToggleDone: handleToggleNodeDone,
+          onUpdateNodeData: handleUpdateNodeData,
+          onDeleteNode: handleDeleteNode,
+          onAddNodeAfter: handleAddNodeAfter,
+          onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+          onManualToggleExpansion: handleManualToggleExpansion,
+          onUpdateNodeColor: handleUpdateNodeColor,
+        },
+        draggable: true,
+        selectable: true,
+      };
+      setNodes([tempLoadingNode]);
+      setEdges([]); 
+      setNodeIdCounter(currentTempNodeIdCounter);
+    }
 
     try {
-      const result = await generateRoadmap({ prompt: promptToUse });
+      const jsonResult = await generateRoadmap({ prompt: promptToUse });
       
-      if (!result.roadmap || result.roadmap.length === 0) {
+
+      {/* No project created  */}
+      if (!jsonResult) {
         toast({
           title: 'No Roadmap Generated',
           description: 'The AI did not return any roadmap steps. Try a different prompt.',
@@ -141,6 +144,22 @@ function FlowCanvas() {
         setEdges([]);
         return;
       }
+
+      {/*project created  */}
+      let result: { projectTitle?: string; roadmap: { id: string; title: string; description?: string; }[] };
+      try {
+        result = JSON.parse(jsonResult);
+    } catch (parseError) {
+        console.error("Failed to parse AI response as JSON:", parseError);
+        toast({
+            title: 'Invalid AI Output',
+            description: 'The AI returned invalid JSON. Try rephrasing your prompt.',
+            variant: 'destructive',
+        });
+        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
+        setEdges([]);
+        return;
+    }
       
       let newNodesCounter = 0; // Start counter from 0 for new generation
       const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
@@ -201,7 +220,7 @@ function FlowCanvas() {
       setEdges(newEdgesFromAI);
 
       // Set project title to the prompt text on initial generation
-      setProjectTitle(promptToUse);
+      
 
       toast({
         title: 'Roadmap Generated!',
@@ -293,7 +312,7 @@ function FlowCanvas() {
                   variant: 'destructive',
                 });
                 // Optionally redirect to a new project page or dashboard
-                router.push('/app');
+                router.push('/canvas');
               }
             })
             .catch(error => {
@@ -304,7 +323,7 @@ function FlowCanvas() {
                 variant: 'destructive',
               });
               // Optionally redirect to a new project page or dashboard
-              router.push('/app');
+              router.push('/canvas');
             })
             .finally(() => {
               setIsLoading(false);
@@ -414,7 +433,7 @@ function FlowCanvas() {
       // If it was a new project (based on the state before saving), update currentProjectId and navigate
       if ((!currentProjectId || currentProjectId === 'new') && savedProjectId) {
         setCurrentProjectId(savedProjectId); // Update state with the new ID
-        router.replace(`/app?projectId=${savedProjectId}`);
+        router.replace(`/canvas?projectId=${savedProjectId}`);
       }
 
       return savedProjectId;
