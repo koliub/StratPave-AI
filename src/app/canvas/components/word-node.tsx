@@ -27,6 +27,9 @@ export type WordNodeData = {
   onManualToggleExpansion?: (id: string, explicitlyExpanded?: boolean) => void; 
   color?: string;
   onUpdateNodeColor?: (id: string, color: string) => void;
+  isSubroadmapParent?: boolean; // Added to indicate if this node has a sub-roadmap
+  onToggleSubRoadmap?: (id: string) => void; // Added to toggle sub-roadmap visibility
+  isExpandedSubroadmap?: boolean; // Added to track sub-roadmap expansion state
   depth?: number; // Added for hierarchical structure
   parentId?: string; // Added for hierarchical structure
 };
@@ -93,7 +96,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleTitleSave = () => {
     if (data.onUpdateNodeData && editedTitle.trim() !== '') {
-      data.onUpdateNodeData(id, { title: editedTitle, description: data.description }); 
+      data.onUpdateNodeData(id, { title: editedTitle, description: data.description });
     } else {
       setEditedTitle(data.title); 
     }
@@ -102,7 +105,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
 
   const handleDescriptionSave = () => {
     if (data.onUpdateNodeData) {
-      data.onUpdateNodeData(id, { title: data.title, description: editedDescription }); 
+      data.onUpdateNodeData(id, { title: data.title, description: editedDescription });
     }
     setIsEditingDescription(false);
   };
@@ -143,18 +146,25 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
     }
   };
 
+  const handleToggleSubRoadmap = () => {
+    if (data.onToggleSubRoadmap && !data.isLoading && !data.isLoadingSubRoadmap) {
+      data.onToggleSubRoadmap(id);
+    }
+  };
+
   const cardStyle = data.color && !data.isDone ? { borderColor: data.color, borderWidth: '1px' } : {};
   const doneStyle = data.isDone && !data.isLoading ? { borderColor: 'hsl(var(--success))', borderWidth: '2px'} : {};
-  const selectedStyle = selected && !data.isLoading ? 
-    (data.isDone ? { ring: '2px', ringColor: 'hsl(var(--success))', outline: '2px solid hsl(var(--success))', outlineOffset: '2px'} 
-                  : { ring: '2px', ringColor: 'hsl(var(--primary))', outline: '2px solid hsl(var(--primary))', outlineOffset: '2px' }) 
+  const selectedStyle = selected && !data.isLoading ?
+    (data.isDone ? { ring: '2px', ringColor: 'hsl(var(--success))', outline: '2px solid hsl(var(--success))', outlineOffset: '2px'}
+                  : { ring: '2px', ringColor: 'hsl(var(--primary))', outline: '2px solid hsl(var(--primary))', outlineOffset: '2px' })
     : {};
 
 
   return (
     <Card
       className={cn(
-        "w-64 shadow-xl transition-all duration-300 group relative",
+        "w-64 shadow-md transition-all duration-300 group relative",
+        data.isSubnode ? 'border-l-4 border-blue-300 bg-blue-50' : 'bg-white',
         'bg-card text-card-foreground',
         (data.isLoading || data.isLoadingSubRoadmap) && 'opacity-70',
         data.isDone && !data.isLoading && !data.isLoadingSubRoadmap && 'opacity-70 border-2 border-success',
@@ -167,8 +177,8 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       aria-expanded={hasDescription ? isEffectivelyExpanded : undefined}
     >
       {selected && !data.isLoading && !data.isLoadingSubRoadmap && (data.onDeleteNode || data.onAddNodeAfter || data.onGenerateSubRoadmap) && (
-        <div className="absolute -top-3 -right-11 z-10 flex flex-col space-y-1">
-          {data.onDeleteNode && (
+        <div className="absolute -top-3 right-2 z-10 flex flex-col space-y-1">
+           {data.onDeleteNode && (
             <Button
               variant="ghost"
               size="icon"
@@ -194,7 +204,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
               <PlusSquare className="h-5 w-5" />
             </Button>
           )}
-           {data.onGenerateSubRoadmap && !data.isSubStep && ( // Conditionally render if not a sub-step itself
+          {data.onGenerateSubRoadmap && !data.isSubnode && ( // Conditionally render if not a sub-step itself
              <Button
               variant="ghost"
               size="icon"
@@ -246,7 +256,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
               ) : (
                 <CardTitle className={cn(
                   "text-base font-semibold break-words cursor-pointer relative text-card-foreground",
-                   data.isDone && "line-through text-muted-foreground"
+                  data.isDone && "line-through text-muted-foreground"
                 )}>
                   {data.isLoading ? 'Generating...' : data.isLoadingSubRoadmap ? 'Expanding...' : data.title || 'Untitled Step'}
                 </CardTitle>
@@ -302,6 +312,16 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
             </CardDescription>
           )}
         </CardContent>
+      )}
+      {data.isSubroadmapParent && (
+        <div className="p-3 pt-0 text-center">
+          <button
+            onClick={() => data.onToggleSubRoadmap?.(id)}
+            className="text-xs text-blue-500 hover:underline mt-2"
+          >
+            {data.isExpandedSubroadmap ? 'Collapse Subroadmap' : 'Expand Subroadmap'}
+          </button>
+        </div>
       )}
       <Handle type="target" position={Position.Top} id={`${id}-target`} className="!w-px !h-px !bg-transparent !border-none" />
       <Handle type="source" position={Position.Bottom} id={`${id}-source`} className="!w-px !h-px !bg-transparent !border-none" />

@@ -11,9 +11,8 @@ import {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-import { WordNode, type WordNodeData } from '@/app/canvas/components/word-node';
-import { generateRoadmap } from '@/ai/tets';
+import { WordNode, type WordNodeData } from '@/app/canvas/components/word-node'; // Import WordNode and its data type
+import { generateRoadmap } from '@/ai/RoadmapNodeGen';
 import { useToast } from '@/hooks/use-toast';
 import {
   SidebarProvider,
@@ -34,6 +33,8 @@ const nodeTypes: NodeTypes = {
 const DEFAULT_NODE_COLOR = '#A0A0A0';
 
 function FlowCanvas() {
+  {/* State Management */}
+  // UI States
   const [promptText, setPromptText] = useState('');
   const [projectTitle, setProjectTitle] = useState(''); // New state for project title
   const [isLoading, setIsLoading] = useState(false); 
@@ -41,7 +42,10 @@ function FlowCanvas() {
   const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
   const [isMiniMapVisible, setIsMiniMapVisible] = useState(true);
   const [projectLoaded, setProjectLoaded] = useState(false); // New state to track if project is loaded
+
   
+  {/* Hooks and Contexts */}
+  // Utility hooks
   const generationAttempted = useRef(false);
   const { toast } = useToast();
   const reactFlowInstance = useReactFlow();
@@ -49,6 +53,7 @@ function FlowCanvas() {
   const router = useRouter(); // Import useRouter
   const projectIdFromUrl = searchParams.get('id'); // Get projectId from search params
   const { user, loading: userLoading } = useAuth(); // Get user and loading state
+  // Custom hook for node/edge management
 
   // State to hold the current project ID, updated after saving a new project
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(projectIdFromUrl);
@@ -68,14 +73,16 @@ function FlowCanvas() {
     handleToggleNodeDone,
     handleUpdateNodeData,
     handleAddNodeAfter,
-    handleGenerateSubRoadmapPrompt,
-  } = useNodeManagement({
+    handleGenerateSubRoadmap,
+  } = useNodeManagement({ // This hook should ideally return these functions
     isLoading: isLoading,
     reactFlowInstance: reactFlowInstance,
     globalExpansionOverride: globalExpansionOverride,
     projectPrompt: promptText, // Pass promptText here
   });
 
+  {/* ------------------------------ */}
+  {/* Effects */}
   // Effect to fit view on nodes/edges change
   useEffect(() => {
     if (reactFlowInstance && (nodes.length > 0 || edges.length > 0) && !selectedNodeIdFromSidebar) {
@@ -96,82 +103,72 @@ function FlowCanvas() {
       });
       return;
     }
-    {/* loading*/}{
-      setIsLoading(true);
-      setSelectedNodeIdFromSidebar(null); 
-      setGlobalExpansionOverride(null);
-      
-      let currentTempNodeIdCounter = nodeIdCounter;
-      const tempLoadingNodeId = `loading_node_${currentTempNodeIdCounter}`;
-      currentTempNodeIdCounter++;
-
-      const tempLoadingNode: Node<WordNodeData> = {
-        id: tempLoadingNodeId,
-        type: 'wordNode',
-        position: { x: 50, y: 50 }, 
-        data: {
-          title: 'Generating Roadmap...', 
-          isLoading: true, 
-          isDone: false,
-          onToggleDone: handleToggleNodeDone,
-          onUpdateNodeData: handleUpdateNodeData,
-          onDeleteNode: handleDeleteNode,
-          onAddNodeAfter: handleAddNodeAfter,
-          onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
-          onManualToggleExpansion: handleManualToggleExpansion,
-          onUpdateNodeColor: handleUpdateNodeColor,
-        },
-        draggable: true,
-        selectable: true,
-      };
-      setNodes([tempLoadingNode]);
-      setEdges([]); 
-      setNodeIdCounter(currentTempNodeIdCounter);
-    }
-
+  
+    setIsLoading(true);
+    setSelectedNodeIdFromSidebar(null);
+    setGlobalExpansionOverride(null);
+  
+    const tempId = `loading_node_${nodeIdCounter}`;
+    const loadingNode: Node<WordNodeData> = {
+      id: tempId,
+      type: 'wordNode',
+      position: { x: 50, y: 50 },
+      data: {
+        title: 'Generating Roadmap...',
+        isLoading: true,
+        isDone: false,
+        onToggleDone: handleToggleNodeDone,
+        onUpdateNodeData: handleUpdateNodeData,
+        onDeleteNode: handleDeleteNode,
+        onAddNodeAfter: handleAddNodeAfter,
+        onGenerateSubRoadmap: handleGenerateSubRoadmap,
+        onManualToggleExpansion: handleManualToggleExpansion,
+        onUpdateNodeColor: handleUpdateNodeColor,
+      },
+      draggable: true,
+      selectable: true,
+    };
+  
+    setNodes([loadingNode]);
+    setEdges([]);
+    setNodeIdCounter(nodeIdCounter + 1);
+  
     try {
       const jsonResult = await generateRoadmap({ prompt: promptToUse });
-      
-
-      {/* No project created  */}
       if (!jsonResult) {
         toast({
           title: 'No Roadmap Generated',
           description: 'The AI did not return any roadmap steps. Try a different prompt.',
-          variant: 'default',
         });
-        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId)); 
-        setEdges([]);
+        setNodes((nds) => nds.filter(n => n.id !== tempId));
         return;
       }
-
-      {/*project created  */}
-      let result: { projectTitle?: string; roadmap: { id: string; title: string; description?: string; }[] };
+  
+      let result;
       try {
         result = JSON.parse(jsonResult);
-    } catch (parseError) {
-        console.error("Failed to parse AI response as JSON:", parseError);
+      } catch (err) {
+        console.error("Failed to parse AI response as JSON:", err);
         toast({
-            title: 'Invalid AI Output',
-            description: 'The AI returned invalid JSON. Try rephrasing your prompt.',
-            variant: 'destructive',
+          title: 'Invalid AI Output',
+          description: 'The AI returned invalid JSON. Try rephrasing your prompt.',
+          variant: 'destructive',
         });
-        setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
-        setEdges([]);
+        setNodes((nds) => nds.filter(n => n.id !== tempId));
         return;
-    }
-      
-      let newNodesCounter = 0; // Start counter from 0 for new generation
-      const newNodesFromAI: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
-        const currentNodesCount = index;
-        const xPosition = (currentNodesCount % 3) * 280 + (Math.random() * 30 - 15) + 50;
-        const yPosition = Math.floor(currentNodesCount / 3) * 200 + (Math.random() * 30 - 15) + 50;
-        // Generate a more stable ID based on step ID and index
-        const nodeId = `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${index}`;
+      }
+  
+      setProjectTitle(result.projectTitle || promptToUse);
+  
+      const newNodes: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
+        const pos = {
+          x: (index % 3) * 280 + (Math.random() * 30 - 15) + 50,
+          y: Math.floor(index / 3) * 200 + (Math.random() * 30 - 15) + 50,
+        };
         return {
-          id: nodeId,
+          id: `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${index}`,
           type: 'wordNode',
-          position: { x: xPosition, y: yPosition },
+          position: pos,
           data: {
             title: step.title,
             description: step.description,
@@ -181,81 +178,75 @@ function FlowCanvas() {
             onUpdateNodeData: handleUpdateNodeData,
             onDeleteNode: handleDeleteNode,
             onAddNodeAfter: handleAddNodeAfter,
-            onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+            onGenerateSubRoadmap: handleGenerateSubRoadmap,
             onManualToggleExpansion: handleManualToggleExpansion,
             onUpdateNodeColor: handleUpdateNodeColor,
             color: DEFAULT_NODE_COLOR,
             _isExpandedOverride: !!step.description,
-            depth: 0, // Add initial depth for main nodes
+            depth: 0,
           },
           draggable: true,
           selectable: true,
         };
       });
-
-      const newEdgesFromAI: Edge[] = [];
-      if (newNodesFromAI.length > 1) {
-        for (let i = 0; i < newNodesFromAI.length - 1; i++) {
-          newEdgesFromAI.push({
-            id: `e-${newNodesFromAI[i].id}-${newNodesFromAI[i + 1].id}`,
-            source: newNodesFromAI[i].id,
-            target: newNodesFromAI[i + 1].id,
-            animated: true,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
-              color: 'hsl(var(--accent))',
-            },
-            style: {
-              strokeWidth: 2,
-              stroke: 'hsl(var(--accent))',
-            },
-          });
-        }
-      }
-
-      setNodeIdCounter(newNodesFromAI.length); // Set counter based on the number of generated nodes
-      setNodes(newNodesFromAI);
-      setEdges(newEdgesFromAI);
-
-      // Set project title to the prompt text on initial generation
-      
-
+  
+      const newEdges: Edge[] = newNodes.slice(0, -1).map((node, i) => ({
+        id: `e-${node.id}-${newNodes[i + 1].id}`,
+        source: node.id,
+        target: newNodes[i + 1].id,
+        animated: true,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: 'hsl(var(--accent))',
+        },
+        style: {
+          strokeWidth: 2,
+          stroke: 'hsl(var(--accent))',
+        },
+      }));
+  
+      setNodeIdCounter(newNodes.length);
+      setNodes(newNodes);
+      setEdges(newEdges);
+  
       toast({
         title: 'Roadmap Generated!',
-        description: `Created ${newNodesFromAI.length} steps for your project.`,
+        description: `Created ${newNodes.length} steps for your project.`,
       });
-
+  
     } catch (error) {
       console.error('Roadmap generation error:', error);
-      let errorMessage = 'Failed to generate roadmap. Please try again.';
-      if (error instanceof Error) {
-        errorMessage = error.message.includes("output was null")
+      const msg = error instanceof Error
+        ? error.message.includes("output was null")
           ? "AI failed to produce a valid roadmap structure. Try rephrasing your prompt."
           : error.message.includes("roadmap array is missing")
             ? "AI output was invalid. Roadmap data is not correctly formatted."
-            : error.message;
-      }
+            : error.message
+        : 'Failed to generate roadmap. Please try again.';
+  
       toast({
         title: 'Error Generating Roadmap',
-        description: errorMessage,
+        description: msg,
         variant: 'destructive',
       });
-      setNodes((nds) => nds.filter(node => node.id !== tempLoadingNodeId));
+      setNodes((nds) => nds.filter(n => n.id !== tempId));
       setEdges([]);
     } finally {
       setIsLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     promptText, toast, reactFlowInstance,
-    setNodeIdCounter, // Removed nodeIdCounter from deps as it's managed internally now
-    setNodes, setEdges, setProjectTitle,
+    setNodeIdCounter, setNodes, setEdges, setProjectTitle,
     handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode,
     handleAddNodeAfter, handleManualToggleExpansion, handleUpdateNodeColor,
-    handleGenerateSubRoadmapPrompt
+   
   ]);
+  
+
+  // Function to generate a sub-roadmap for a given node
+
 
   // Effect to handle loading project from DB or triggering generation
   useEffect(() => {
@@ -278,7 +269,7 @@ function FlowCanvas() {
                     onUpdateNodeData: handleUpdateNodeData,
                     onDeleteNode: handleDeleteNode,
                     onAddNodeAfter: handleAddNodeAfter,
-                    onGenerateSubRoadmap: handleGenerateSubRoadmapPrompt,
+                    onGenerateSubRoadmap: handleGenerateSubRoadmap,
                     onManualToggleExpansion: handleManualToggleExpansion,
                     onUpdateNodeColor: handleUpdateNodeColor,
                     // Ensure isDone is loaded correctly
@@ -367,9 +358,10 @@ function FlowCanvas() {
         setProjectLoaded(true); // Consider it loaded as an empty project
       }
     }
-  }, [currentProjectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setProjectTitle, setNodeIdCounter, doGenerateRoadmap, searchParams, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, handleGenerateSubRoadmapPrompt, handleManualToggleExpansion, handleUpdateNodeColor, projectIdFromUrl]); // Add currentProjectId and projectIdFromUrl to deps
+  }, [currentProjectId, user, userLoading, projectLoaded, router, toast, setNodes, setEdges, setPromptText, setProjectTitle, setNodeIdCounter, doGenerateRoadmap, searchParams, handleToggleNodeDone, handleUpdateNodeData, handleDeleteNode, handleAddNodeAfter, handleGenerateSubRoadmap, handleManualToggleExpansion, handleUpdateNodeColor, projectIdFromUrl]); // Add currentProjectId and projectIdFromUrl to deps
 
 
+  {/* Node Interaction Handlers */} // Note: Some of these handlers are now managed within useNodeManagement. Review this section.
   const handleNodeSelectFromSidebar = (nodeId: string) => {
     setSelectedNodeIdFromSidebar(nodeId);
     setNodes(nds =>
@@ -394,6 +386,8 @@ function FlowCanvas() {
     setGlobalExpansionOverride(false);
   };
 
+  {/* Project Saving */}
+  // Function to save the project to Firestore
   const handleSaveRoadmap = useCallback(async () => {
     if (!user?.uid) {
       toast({
@@ -450,8 +444,9 @@ function FlowCanvas() {
       setIsLoading(false);
     }
   }, [user, currentProjectId, nodes, edges, promptText, projectTitle, toast, router]); // Added currentProjectId to deps and removed projectId
+  // Dependencies from useNodeManagement handlers
 
-
+  //r
   return (
     <SidebarProvider>
       <RoadmapSidebar
@@ -460,6 +455,7 @@ function FlowCanvas() {
         selectedNodeIdFromSidebar={selectedNodeIdFromSidebar}
         onNodeSelect={handleNodeSelectFromSidebar}
       />
+      {/* Main Canvas Area */}
 
       <SidebarInset className="flex flex-col h-screen">
         <ProjectHeader
@@ -475,6 +471,7 @@ function FlowCanvas() {
           isLoading={isLoading}
           isUserLoggedIn={!!user}
         />
+        {/* Roadmap Canvas Component */}
 
         <main className="flex-grow relative" aria-label="React Flow canvas area">
           <RoadmapCanvas
@@ -491,6 +488,7 @@ function FlowCanvas() {
   );
 }
 
+// Wrapper component with ReactFlowProvider and Suspense
 export default function ProjectPage() {
   return (
     <Suspense fallback={<div>Chargement...</div>}>
