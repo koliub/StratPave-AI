@@ -17,16 +17,16 @@ export type WordNodeData = {
   isLoading?: boolean; // For main roadmap loading or this node's own loading state
   isLoadingSubRoadmap?: boolean; // Specifically for when this node is generating a sub-roadmap
   isDone?: boolean;
-  isSubStep?: boolean; // To identify if this node is a sub-step
   onToggleDone?: (id: string) => void;
   onUpdateNodeData?: (id: string, updatedData: { title: string; description?: string }) => void;
   onDeleteNode?: (id: string) => void;
   onAddNodeAfter?: (id: string) => void;
   onGenerateSubRoadmap?: (id: string) => void;
-  _isExpandedOverride?: boolean; 
+  _isExpandedOverride?: boolean;
   onManualToggleExpansion?: (id: string, explicitlyExpanded?: boolean) => void; 
   color?: string;
   onUpdateNodeColor?: (id: string, color: string) => void;
+ isSubStep?: boolean; // To identify if this node is a sub-step
   isSubroadmapParent?: boolean; // Added to indicate if this node has a sub-roadmap
   onToggleSubRoadmap?: (id: string) => void; // Added to toggle sub-roadmap visibility
   isExpandedSubroadmap?: boolean; // Added to track sub-roadmap expansion state
@@ -313,14 +313,17 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
           )}
         </CardContent>
       )}
+      {/* Conditional container for the sub-roadmap */}
       {data.isSubroadmapParent && (
-        <div className="p-3 pt-0 text-center">
+        <div className="subroadmap-container w-full border-t border-border p-2 text-center bg-accent/10">
           <button
             onClick={() => data.onToggleSubRoadmap?.(id)}
-            className="text-xs text-blue-500 hover:underline mt-2"
+            className="text-xs text-blue-700 hover:underline font-medium"
           >
             {data.isExpandedSubroadmap ? 'Collapse Subroadmap' : 'Expand Subroadmap'}
           </button>
+          {data.isExpandedSubroadmap && (
+            <div className="mt-2 p-2 border border-dashed border-border rounded bg-background/50 min-h-[50px]">{/* Sub-roadmap nodes will be rendered here */}</div>)}
         </div>
       )}
       <Handle type="target" position={Position.Top} id={`${id}-target`} className="!w-px !h-px !bg-transparent !border-none" />

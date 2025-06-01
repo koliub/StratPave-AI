@@ -160,10 +160,10 @@ function FlowCanvas() {
   
       setProjectTitle(result.projectTitle || promptToUse);
   
-      const newNodes: Node<WordNodeData>[] = result.roadmap.map((step, index) => {
+      const newNodes: Node<WordNodeData>[] = result.roadmap.map((step: any, index: any) => {
         const pos = {
-          x: (index % 3) * 280 + (Math.random() * 30 - 15) + 50,
-          y: Math.floor(index / 3) * 200 + (Math.random() * 30 - 15) + 50,
+          x: index * 300 + 50, // Simple horizontal spacing
+          y: 50,
         };
         return {
           id: `roadmapnode_${step.id.replace(/\s+/g, '_').toLowerCase()}_${index}`,

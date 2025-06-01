@@ -56,12 +56,12 @@ export default function LandingPage() {
         <section className="relative w-full py-20 md:py-32 lg:py-40 xl:py-48 overflow-hidden">
           <div className="absolute inset-0 z-0">
             <Image
-              src="https://placehold.co/1920x1080.png"
+              src="/images/RoadmapBackground.png"
               alt="Abstract Background" 
               layout="fill" 
               objectFit="cover" 
               quality={80} 
-              className="opacity-10 dark:opacity-5" 
+              className="opacity-20 dark:opacity-20" 
               priority
               data-ai-hint="abstract futuristic"
             />
@@ -93,7 +93,7 @@ export default function LandingPage() {
               </div>
               <div className="hidden lg:flex items-center justify-center p-4 md:p-8">
                 <Image 
-                  src="https://placehold.co/600x450.png"
+                  src="/images/HappyPeople.webp"
                   alt="StratPave Roadmap Illustration" 
                   width={600} 
                   height={450} 

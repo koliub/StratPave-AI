@@ -71,7 +71,7 @@ export async function generateSubRoadmap(input: GenerateSubRoadmapInput): Promis
 
   const { projectTitle, parentNode, nextNode } = input;
 
-  const prompt = `Generate sub-roadmap points for the step "${parentNode.title}"${
+  const prompt = `Generate sub-roadmap points for the step "${parentNode.title}" and do not include the parent node in your output. only returning the sub nodes so not the node after or the initial node${
     parentNode.description ? ` with the description "${parentNode.description}".` : ""
   } for the overall project "${projectTitle}". ${
     nextNode

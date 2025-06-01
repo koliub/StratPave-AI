@@ -9,7 +9,8 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
   type ReactFlowInstance,
-  MarkerType,
+ MarkerType,
+ type XYPosition,
 } from "reactflow";
 import { v4 as uuidv4 } from 'uuid'; // Import uuid for unique IDs
 import { generateSubRoadmap } from "@/ai/RoadmapNodeGen"; // Import the AI function
@@ -26,6 +27,7 @@ interface UseNodeManagementProps {
 }
 
 const DEFAULT_NODE_COLOR = "#A0A0A0";
+const SUB_NODE_COLOR = "#FACC15";
 
 export function useNodeManagement({
   initialNodes = [],
@@ -74,6 +76,8 @@ export function useNodeManagement({
       const newIsDone = !n.data?.isDone;
       const shouldExpand = globalExpansionOverride ?? (!newIsDone && !!n.data.description);
       return {
+ // Use applyNodeChanges here to handle potential position updates by React Flow
+ ...applyNodeChanges([{ id, type: 'position', position: n.position }], [n])[0],
         ...n,
         data: {
           ...n.data,
@@ -86,6 +90,7 @@ export function useNodeManagement({
   const handleUpdateNodeData = useCallback((id: string, data: { title: string; description?: string }) => {
     updateNode(id, n => ({ ...n, data: { ...n.data, ...data } }));
     toast({ title: "Step Updated", description: `Step "${data.title}" has been updated.` });
+ setNodes(nds => [...nds]);
   }, []);
 
   const handleDeleteNode = useCallback((id: string) => {
@@ -153,8 +158,8 @@ export function useNodeManagement({
       const edgeBase = {
         type: "smoothstep",
         animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: "hsl(var(--accent))" },
-        style: { strokeWidth: 2, stroke: "hsl(var(--accent))" },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: SUB_NODE_COLOR },
+        style: { strokeWidth: 2, stroke: SUB_NODE_COLOR },
       };
       if (existing) updated.push({ ...edgeBase, id: `e-${newId}-${existing.target}`, source: newId, target: existing.target });
       updated.push({ ...edgeBase, id: `e-${id}-${newId}`, source: id, target: newId });
@@ -197,22 +202,21 @@ export function useNodeManagement({
       const { roadmap }: { roadmap: { id: string; title: string; description?: string; }[] } = JSON.parse(jsonResult);
   
       const parentPos = parentNode.position;
-      const spacingY = 100;
-      const offsetX = 50;
-      const baseY = parentPos.y + (parentNode.height || 100) + spacingY;
+      const spacingY = 150;
+      const baseY = parentPos.y + (parentNode.height || 100) + 50;
       const parentDepth = parentNode.data.depth || 0;
   
       const newSubNodes = roadmap.map((step, i) => ({
         id: `${nodeId}_sub_${uuidv4()}`,
         type: 'wordNode',
-        position: { x: parentPos.x + offsetX, y: baseY + i * spacingY },
+        position: { x: parentPos.x, y: baseY + i * spacingY },
         draggable: true,
         selectable: true,
         data: {
           ...step,
           isDone: false,
           isSubStep: true,
-          color: DEFAULT_NODE_COLOR,
+          color: SUB_NODE_COLOR,
           _isExpandedOverride: !!step.description,
           depth: parentDepth + 1,
           parentId: nodeId,
@@ -228,8 +232,8 @@ export function useNodeManagement({
   
       const edgeStyle = {
         animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
-        style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: SUB_NODE_COLOR },
+        style: { strokeWidth: 2, stroke: SUB_NODE_COLOR },
       };
   
       const newSubEdges: Edge[] = [];
