@@ -18,15 +18,15 @@ import { Progress } from '@/components/ui/progress'; // Keep Progress for now as
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 // Importing custom components.
 import { ThemeToggle } from '@/components/theme/theme-toggle';
-import { UserAuthSection } from '@/components/auth/UserAuthSection'; // Import UserAuthSection
+import { UserAuthSection } from '@/components/auth/UserAuthSection';
 // Importing icons.
-import { Loader2, PlusCircle, Trash2, FileText, Pencil, Repeat2, EllipsisVertical} from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, FileText, Pencil, Repeat2, EllipsisVertical, WandSparkles, Sparkles} from 'lucide-react';
 // Importing hooks/contexts.
 import { useTheme } from '@/components/theme/theme-provider';
 // Importing the correct auth hook
 import { useAuth } from '@/context/AuthContext';
 // Importing Firebase interaction functions and types.
-import { getUserProjectsFromDb, deleteProjectFromDb, ProjectPreview } from '@/lib/firebase'; // Import firebase functions and types
+import { getUserProjectsFromDb, deleteProjectFromDb, shareProjectWithUser, updateProjectTitleInDb, ProjectPreview } from '@/lib/firebase'; // Import firebase functions and types
 
 // --- Dashboard Component Definition ---
 export default function Dashboard() {
@@ -130,18 +130,70 @@ export default function Dashboard() {
       // TODO: Implement user-facing error handling
     }
   };
-
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState<string>('');
+  const [shareInput, setShareInput] = useState<string>('');
+  
   // Handler for sharing a project.
-  const handleShareProject = (projectId: string) => {
-    console.log('Sharing project:', projectId);
-    // TODO: Implement share project logic
+  const handleShareProject = async (projectId: string) => {
+    if (!user?.uid) {
+      console.error("User not authenticated. Cannot share project.");
+      return;
+    }
+  
+    const targetUID = prompt("Enter the user-ID of the user to share this project with (You can find it under Your Email when you click on your profile)");
+    if (!targetUID) {
+      console.log("Sharing cancelled. No User-ID provided.");
+      return;
+    }
+  
+    try {
+      await shareProjectWithUser(user.uid, projectId, targetUID);
+      console.log(`Project shared with ${targetUID}`);
+      // Optional: show toast/notification to the user
+    } catch (error: any) {
+      console.error("Error sharing project:", error.message || error);
+      // Optional: show error to the user (toast, alert, etc.)
+      alert(`Failed to share project: ${error.message || "Unknown error"}`);
+    }
   };
+  
+  
 
   // Handler for changing project title.
-  const handleChangeTitle = (projectId: string) => {
-    console.log('Changing title for project:', projectId);
-    // TODO: Implement change title logic (e.g., open a modal or inline edit)
+  const handleChangeTitle = async (projectId: string) => {
+    if (!user?.uid) { // Corrected: use user?.uid
+      console.error("User not authenticated. Cannot change title project.");
+      // TODO: Implement user-facing error handling
+      return;
+    }
+    if (editingProjectId === projectId) {
+      // Save new title
+      try {
+        console.log(`Saving new title "${newTitle}" for project ${projectId}`);
+        await updateProjectTitleInDb(user.uid, projectId, newTitle);
+  
+        setProjects(prev =>
+          prev.map(p =>
+            p.id === projectId ? { ...p, projectTitle: newTitle } : p
+          )
+        );
+        setEditingProjectId(null);
+        setNewTitle('');
+      } catch (error) {
+        console.error("Error updating project title:", error);
+        // TODO: user-facing error handling
+      }
+    } else {
+      // Enter edit mode
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        setEditingProjectId(projectId);
+        setNewTitle(project.projectTitle);
+      }
+    }
   };
+  
 
   // --- UI Utility Functions Section ---
   // Helper function to format timestamp.
@@ -208,8 +260,23 @@ export default function Dashboard() {
                       <CardContent className="p-4 cursor-pointer">
                         {/* Project title and delete button */}
                         <div className="flex justify-between items-center mb-2">
-                          <CardTitle className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap">{project.projectTitle}</CardTitle>
-                          {/* Dropdown menu for project actions (e.g., delete) */}
+                        {editingProjectId === project.id ? (
+                          <Input
+                            value={newTitle}
+                            onChange={(e) => setNewTitle(e.target.value)}
+                            onBlur={() => handleChangeTitle(project.id!)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleChangeTitle(project.id!);
+                            }}
+                            className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap"
+                            autoFocus
+                          />
+                        ) : (
+                          <CardTitle className="text-lg flex-grow overflow-hidden text-ellipsis whitespace-nowrap">
+                            {project.projectTitle}
+                          </CardTitle>
+                        )}
+                      {/* Dropdown menu for project actions (e.g., delete) */}
                           {/* To make the dropdown clickable and prevent link navigation, stop propagation */}
                           {/* The DropdownMenuTrigger needs to be clickable */}
                           {/* Button to open the dropdown menu - placed outside the Link but visually within the card */}
@@ -255,7 +322,7 @@ export default function Dashboard() {
                         </div>
                         {/* Display Node Count */}
                         <div className="text-sm font-medium mb-2">
-                          Nodes: {project.nodeCount}
+                          Steps: {project.nodeCount}
                         </div>
                         {/* Display last updated timestamp */}
                         <div className="text-sm text-gray-500">
@@ -295,34 +362,53 @@ export default function Dashboard() {
             </div>
 
             {/* Centered Content Section (Roadmap Creation) */}
-            <div className="flex-1 flex items-center justify-center p-6">
+            <div className="flex-1 flex items-center justify-center p-8 bg-muted rounded-2xl shadow-lg">
               {/* Container for the create roadmap input and button */}
-              <div className="w-full max-w-md flex flex-col items-center transition-all duration-300">
+              <div className="w-full max-w-2xl flex flex-col items-center space-y-6 transition-all duration-300">
+                
                 {/* Title for the roadmap creation section */}
-                <h1 className="text-4xl tracking-tighter sm:text-5xl md:text-6xl xl:text-7xl/none bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-500 to-teal-500 py-2">Create Roadmap</h1>
+                
+                <h1 className="flex items-center justify-center text-5xl sm:text-6xl md:text-7xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-500 to-teal-500 space-x-4">
+                  <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-primary mr-3" />
+                  <span>Create Roadmap</span>
+                </h1>
+                
+                {/* Instructional Text */}
+                <p className="text-center text-muted-foreground text-base sm:text-lg leading-relaxed">
+                  To generate a roadmap:
+                  <br />
+                  1. Enter your project goal or topic in the input box.<br />
+                  2. Click the <strong>"Create Roadmap"</strong> button or press <kbd>Enter</kbd>.<br />
+                  3. You’ll be directed to the canvas to view and edit your roadmap.
+                </p>
+                
                 {/* Input and button container */}
-                <div className="flex w-full space-x-2">
+                <div className="flex w-full space-x-3">
                   {/* Input field for entering the roadmap title */}
                   <Input
                     type="text"
-                    placeholder="Enter Project Prompt" // Placeholder for dynamic input
+                    placeholder="Enter your project idea..."
                     value={pormptText}
                     onChange={(e) => setPrompt(e.target.value)}
-                    className="flex-grow rounded-full"
-                    // Handle Enter key press to trigger roadmap creation
+                    className="flex-grow rounded-full px-5 py-3 shadow-inner"
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
                         handleCreateRoadmap();
                       }
                     }}
                   />
+                  
                   {/* Button to create the roadmap */}
-                  <Button onClick={handleCreateRoadmap} className="rounded-full bg-blue-500 hover:bg-blue-600 text-white">
-                    <PlusCircle className="mr-2" size={18} /> Create Roadmap
-                    </Button>
+                  <Button 
+                    onClick={handleCreateRoadmap} 
+                    className="rounded-full px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-semibold shadow hover:brightness-110"
+                  >
+                    <PlusCircle className="mr-2" size={18} /> Create
+                  </Button>
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </main>

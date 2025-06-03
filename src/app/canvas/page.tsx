@@ -1,5 +1,5 @@
 "use client";
-
+import { useLayoutEffect } from 'react';
 import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
 import {
   type Node,
@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { WordNode, type WordNodeData } from '@/app/canvas/components/word-node'; // Import WordNode and its data type
 import { generateRoadmap } from '@/ai/RoadmapNodeGen';
 import { useToast } from '@/hooks/use-toast';
+
 import {
   SidebarProvider,
   SidebarInset,
@@ -42,6 +43,7 @@ function FlowCanvas() {
   const [globalExpansionOverride, setGlobalExpansionOverride] = useState<boolean | null>(null);
   const [isMiniMapVisible, setIsMiniMapVisible] = useState(true);
   const [projectLoaded, setProjectLoaded] = useState(false); // New state to track if project is loaded
+  const [triggerFitView, setTriggerFitView] = useState(false); // State to trigger fitView
 
   
   {/* Hooks and Contexts */}
@@ -84,14 +86,34 @@ function FlowCanvas() {
   {/* ------------------------------ */}
   {/* Effects */}
   // Effect to fit view on nodes/edges change
-  useEffect(() => {
-    if (reactFlowInstance && (nodes.length > 0 || edges.length > 0) && !selectedNodeIdFromSidebar) {
-      const timer = setTimeout(() => {
-        reactFlowInstance.fitView({ duration: 300, padding: 0.2 });
-      }, 150); 
-      return () => clearTimeout(timer);
-    }
-  }, [nodes, edges, reactFlowInstance, selectedNodeIdFromSidebar]);
+  const prevNodesRef = useRef<Node[]>([]);
+
+
+useLayoutEffect(() => {
+  if (reactFlowInstance && triggerFitView) {
+    setTimeout(() => {
+      reactFlowInstance.fitView();
+    }, 0); // delay to allow layout pass
+    setTriggerFitView(false);
+  }
+}, [triggerFitView, reactFlowInstance]);
+
+
+ // Add beforeunload event listener for unsaved changes
+ useEffect(() => {
+ const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // You'll need a way to track if there are unsaved changes.
+      // For now, this will trigger on every navigation away.
+ event.preventDefault();
+ event.returnValue = ''; // Required for Chrome
+    };
+
+ window.addEventListener('beforeunload', handleBeforeUnload);
+
+ return () => {
+ window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+ }, []); // Add dependencies if you implement an unsaved changes tracking mechanism
 
   const doGenerateRoadmap = useCallback(async (currentPrompt?: string) => {
     const promptToUse = typeof currentPrompt === 'string' ? currentPrompt : promptText;
@@ -131,7 +153,10 @@ function FlowCanvas() {
   
     setNodes([loadingNode]);
     setEdges([]);
+    setTriggerFitView(true); // Trigger fitView after loading node is set
+
     setNodeIdCounter(nodeIdCounter + 1);
+
   
     try {
       const jsonResult = await generateRoadmap({ prompt: promptToUse });
@@ -209,8 +234,9 @@ function FlowCanvas() {
   
       setNodeIdCounter(newNodes.length);
       setNodes(newNodes);
-      setEdges(newEdges);
-  
+      setEdges(newEdges); // Consider adding setEdges to deps if it affects layout significantly
+      setTriggerFitView(true);
+
       toast({
         title: 'Roadmap Generated!',
         description: `Created ${newNodes.length} steps for your project.`,
@@ -247,91 +273,90 @@ function FlowCanvas() {
 
   // Function to generate a sub-roadmap for a given node
 
-
+  const projectLoadAttempted = useRef(false);
   // Effect to handle loading project from DB or triggering generation
   useEffect(() => {
-    if (userLoading) return; // Wait for user authentication state to load
+ console.log('useEffect triggered');
+ console.log('userLoading:', userLoading);
+ if (userLoading || projectLoadAttempted.current) return; // Wait for user authentication state to load
+ console.log('user loaded or not loading');
 
     // Case 1: Load existing project if currentProjectId exists and is not 'new'
     if (currentProjectId && currentProjectId !== 'new') {
+      console.log('Case 1: Loading existing project', currentProjectId);
+  
       if (user?.uid) {
-        if (!projectLoaded) { // Only load if not already loaded
-          setIsLoading(true);
-          getProjectFromDb(user.uid, currentProjectId) // Use currentProjectId here
-            .then(projectData => {
-              if (projectData) {
-                // Map loaded nodes to include function handlers from useNodeManagement
-                const nodesWithHandlers: Node<WordNodeData>[] = (projectData.nodes || []).map((node: any) => ({
-                  ...node,
-                  data: {
-                    ...node.data,
-                    onToggleDone: handleToggleNodeDone,
-                    onUpdateNodeData: handleUpdateNodeData,
-                    onDeleteNode: handleDeleteNode,
-                    onAddNodeAfter: handleAddNodeAfter,
-                    onGenerateSubRoadmap: handleGenerateSubRoadmap,
-                    onManualToggleExpansion: handleManualToggleExpansion,
-                    onUpdateNodeColor: handleUpdateNodeColor,
-                    // Ensure isDone is loaded correctly
-                    isDone: node.data.isDone || false,
-                  },
-                }));
-                
-                setNodes(nodesWithHandlers);
-                setEdges(projectData.edges || []);
-                setPromptText(projectData.prompt || '');
-                // Set project title from loaded data, or default to prompt if not present
-                setProjectTitle(projectData.projectTitle || projectData.prompt || '');
-                // Determine the highest existing node ID to set the counter
-                const maxNodeId = (projectData.nodes || []).reduce((max: number, node: any) => {
-                  // Assuming node IDs are in the format 'somenode_number' or similar
-                  const idParts = node.id.split('_');
-                  const numberPart = parseInt(idParts[idParts.length - 1]);
-                  return isNaN(numberPart) ? max : Math.max(max, numberPart);
-                }, 0);
-                setNodeIdCounter(maxNodeId + 1);
-                setProjectLoaded(true);
-                toast({
-                  title: 'Project Loaded',
-                  description: `Loaded project with ID: ${currentProjectId}`,
-                });
-              } else {
-                // Project not found or not accessible
-                toast({
-                  title: 'Project Not Found',
-                  description: `Project with ID ${currentProjectId} not found or you don't have access.`, 
-                  variant: 'destructive',
-                });
-                // Optionally redirect to a new project page or dashboard
-                router.push('/canvas');
-              }
-            })
-            .catch(error => {
-              console.error('Error loading project:', error);
+        projectLoadAttempted.current = true; // 🛑 Set this early so no duplicate fetch happens
+  
+        setIsLoading(true);
+        getProjectFromDb(user.uid, currentProjectId)
+          .then(projectData => {
+            if (projectData) {
+              console.log('Project data loaded successfully');
+              const nodesWithHandlers = (projectData.nodes || []).map((node: any) => ({
+                ...node,
+                data: {
+                  ...node.data,
+                  onToggleDone: handleToggleNodeDone,
+                  onUpdateNodeData: handleUpdateNodeData,
+                  onDeleteNode: handleDeleteNode,
+                  onAddNodeAfter: handleAddNodeAfter,
+                  onGenerateSubRoadmap: handleGenerateSubRoadmap,
+                  onManualToggleExpansion: handleManualToggleExpansion,
+                  onUpdateNodeColor: handleUpdateNodeColor,
+                  isDone: node.data.isDone || false,
+                },
+              }));
+  
+              setNodes(nodesWithHandlers);
+              setEdges(projectData.edges || []);
+              setPromptText(projectData.prompt || '');
+              setProjectTitle(projectData.projectTitle || projectData.prompt || '');
+  
+              const maxNodeId = (projectData.nodes || []).reduce((max: number, node: any) => {
+                const idParts = node.id.split('_');
+                const numberPart = parseInt(idParts[idParts.length - 1]);
+                return isNaN(numberPart) ? max : Math.max(max, numberPart);
+              }, 0);
+              setNodeIdCounter(maxNodeId + 1);
+              setProjectLoaded(true);
+              toast({ title: 'Project Loaded' });
+            } else {
+              console.log('Project not found or not accessible');
               toast({
-                title: 'Error Loading Project',
-                description: 'Failed to load project. Please try again.',
+                title: 'Project Not Found',
+                description: `Project with ID ${currentProjectId} not found or you don't have access.`,
                 variant: 'destructive',
               });
-              // Optionally redirect to a new project page or dashboard
               router.push('/canvas');
-            })
-            .finally(() => {
-              setIsLoading(false);
+            }
+          })
+          .catch(error => {
+            console.error('Error loading project:', error);
+            toast({
+              title: 'Error Loading Project',
+              description: 'Failed to load project. Please try again.',
+              variant: 'destructive',
             });
-        }
+            router.push('/canvas');
+          })
+          .finally(() => {
+            console.log('Loading finally block - setting isLoading to false');
+            setIsLoading(false);
+          });
       } else if (!user) {
-        // User is not logged in, cannot load project
+        console.log('User not logged in, cannot load project');
         toast({
           title: 'Authentication Required',
           description: 'Please log in to access this project.',
           variant: 'destructive',
         });
-        router.push('/auth'); // Redirect to login page
+        router.push('/auth');
       }
     }
     // Case 2: New project creation or generation from prompt if no currentProjectId or currentProjectId is 'new' AND no project is loaded yet
     else if ((!currentProjectId || currentProjectId === 'new') && !projectLoaded && !generationAttempted.current) {
+ console.log('Case 2: New project or generation from prompt');
       const storedPrompt = sessionStorage.getItem('roadmapPrompt');
       const initialPromptFromQuery = searchParams.get('prompt');
 
@@ -339,12 +364,14 @@ function FlowCanvas() {
         setPromptText(storedPrompt);
         setProjectTitle(storedPrompt); // Set project title from stored prompt
         doGenerateRoadmap(storedPrompt);
+ console.log('Generating roadmap from stored prompt');
         sessionStorage.removeItem('roadmapPrompt'); // Clean up sessionStorage
         generationAttempted.current = true;
       } else if (initialPromptFromQuery && (projectIdFromUrl === 'new' || !projectIdFromUrl)) { // Use projectIdFromUrl here for the initial check
         setPromptText(initialPromptFromQuery);
         setProjectTitle(initialPromptFromQuery); // Set project title from query prompt
         doGenerateRoadmap(initialPromptFromQuery);
+ console.log('Generating roadmap from query prompt');
         generationAttempted.current = true;
       } else if (!initialPromptFromQuery && !storedPrompt && (projectIdFromUrl === 'new' || !projectIdFromUrl)) { // Use projectIdFromUrl here
         // If it's a new project with no prompt, maybe initialize an empty canvas?
@@ -354,6 +381,7 @@ function FlowCanvas() {
         setProjectLoaded(true); // Consider it loaded as an empty project
       } else if (!initialPromptFromQuery && !storedPrompt && !projectIdFromUrl) { // Use projectIdFromUrl here
         // No project ID, no stored prompt, no query prompt - just an empty canvas
+ console.log('Starting with an empty canvas');
         console.log("Starting with an empty canvas.");
         setProjectLoaded(true); // Consider it loaded as an empty project
       }
@@ -449,6 +477,7 @@ function FlowCanvas() {
   //r
   return (
     <SidebarProvider>
+      
       <RoadmapSidebar
         nodes={nodes}
         isLoading={isLoading}

@@ -45,10 +45,10 @@ export function useNodeManagement({
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const projectPromptRef = useRef(projectPrompt);
-
-  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-  useEffect(() => { edgesRef.current = edges; }, [edges]);
+  
+  useEffect(() => { nodesRef.current = nodes; edgesRef.current = edges; }, [nodes, edges]);
   useEffect(() => { projectPromptRef.current = projectPrompt; }, [projectPrompt]);
+  
 
   const onNodesChange: OnNodesChange = useCallback(
     changes => setNodes(nds => applyNodeChanges(changes, nds)),
@@ -94,23 +94,70 @@ export function useNodeManagement({
   }, []);
 
   const handleDeleteNode = useCallback((id: string) => {
-    if (isLoading) return;
-    const deleted = nodesRef.current.find(n => n.id === id);
+    console.log("handleDeleteNode called for node:", id);
+    if (isLoading) {
+      console.log("still loading");
+      return;
+    }
+  
+    const deletedNode = nodesRef.current.find(n => n.id === id);
+    if (!deletedNode) return;
+  
+    const incomingEdge = edgesRef.current.find(e => e.target === id);
+    const outgoingEdge = edgesRef.current.find(e => e.source === id);
+  
+    const previousNodeId = incomingEdge?.source || null;
+    const nextNodeId = outgoingEdge?.target || null;
+  
+    const edgeBase = {
+      type: "smoothstep",
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+      style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
+    };
+  
     setNodes(nds => nds.filter(n => n.id !== id));
-    setEdges(eds => eds.filter(e => e.source !== id && e.target !== id));
-    toast({ title: `Step "${deleted?.data?.title || "Unknown"}" deleted.` });
+    setEdges(eds => {
+      // Remove all edges connected to the node
+      const filteredEdges = eds.filter(e => e.source !== id && e.target !== id);
+  
+      // If both previous and next nodes exist, add a new edge connecting them
+      if (previousNodeId && nextNodeId) {
+        const newEdge: Edge = {
+          ...edgeBase,
+          id: `e-${previousNodeId}-${nextNodeId}`,
+          source: previousNodeId,
+          target: nextNodeId,
+        };
+        return [...filteredEdges, newEdge];
+      }
+  
+      return filteredEdges;
+    });
+  
+    toast({ title: `Step "${deletedNode?.data?.title || "Unknown"}" deleted.` });
   }, [isLoading]);
+  
 
   const handleAddNodeAfter = useCallback((id: string) => {
+    console.log("handleAddNodeAfter called after node:", id); // Add this line
     if (isLoading) return;
   
     let counter = nodeIdCounter;
-    let newId = `manualnode_${counter++}`;
-    const isIdTaken = (id: string) =>
+    let newId = `manualnode_${uuidv4()}`;
+    // Ensure the generated ID is unique among nodes and edges
+    const isIdTaken = (id: string) => 
       nodesRef.current.some(n => n.id === id) || edgesRef.current.some(e => [e.source, e.target].includes(id));
-    while (isIdTaken(newId)) newId = `manualnode_${counter++}_${Math.random().toString(36).slice(2, 7)}`;
-    setNodeIdCounter(counter);
+    while (isIdTaken(newId)) {
+      newId = `manualnode_${uuidv4()}`;
+    }
+    // setNodeIdCounter(counter); // No longer needed with uuidv4
   
+  
+    const parentIndex = nodesRef.current.findIndex(n => n.id === id);
+    const nextNode = nodesRef.current.find(n => 
+      edgesRef.current.some(e => e.source === id && e.target === n.id)
+    );
     const currentNode = nodesRef.current.find(n => n.id === id);
     if (!currentNode) {
       toast({ title: "Error", description: "Current node not found.", variant: "destructive" });
@@ -118,10 +165,16 @@ export function useNodeManagement({
     }
   
     const position = {
-      x: currentNode.position.x,
-      y: currentNode.position.y + (currentNode.height || 150) + 60,
+      x: currentNode.position.x + 300, // Shift to the right
+      y: currentNode.position.y, // Keep the same y position initially
     };
   
+    // Find the index of the current node to insert the new node after it
+    const insertIndex = nodesRef.current.findIndex(n => n.id === id) + 1;
+    // Determine the vertical position based on the previous node (if exists)
+    const prevNode = nodesRef.current[insertIndex - 1];
+    
+
     const newNode: Node<WordNodeData> = {
       id: newId,
       type: "wordNode",
@@ -134,38 +187,53 @@ export function useNodeManagement({
         isDone: false,
         color: DEFAULT_NODE_COLOR,
         depth: currentNode.data.depth,
-        parentId: currentNode.data.parentId,
+        parentId: id,
         _isExpandedOverride: globalExpansionOverride ?? true,
         onToggleDone: handleToggleNodeDone,
         onUpdateNodeData: handleUpdateNodeData,
         onDeleteNode: handleDeleteNode,
         onAddNodeAfter: handleAddNodeAfter,
+        onGenerateSubRoadmap: handleGenerateSubRoadmap,
         onManualToggleExpansion: handleManualToggleExpansion,
         onUpdateNodeColor: handleUpdateNodeColor,
       },
     };
   
+    // Shift all subsequent nodes to the right
     setNodes(nds => {
-      const index = nds.findIndex(n => n.id === id);
-      const updated = [...nds];
-      index !== -1 ? updated.splice(index + 1, 0, newNode) : updated.push(newNode);
-      return updated.map(n => ({ ...n, selected: n.id === newId }));
+      const currentNodeIndex = nds.findIndex(n => n.id === id);
+      if (currentNodeIndex === -1) return nds;
+  
+      const nodesBefore = nds.slice(0, currentNodeIndex + 1);
+      const nodesAfter = nds.slice(currentNodeIndex + 1).map(n => ({
+        ...n,
+        position: {
+          x: n.position.x + 300, // Shift subsequent nodes to the right
+          y: n.position.y,
+        },
+      }));
+  
+      return [...nodesBefore, newNode, ...nodesAfter].map(n => ({ ...n, selected: n.id === newId }));
     });
   
     setEdges(eds => {
-      const updated = eds.filter(e => !(e.source === id && !e.target));
-      const existing = eds.find(e => e.source === id);
+      // Remove the edge from the current node to the next node if it exists
+      const filteredEdges = eds.filter(e => !(e.source === id && e.target === nextNode?.id));
+  
+      // Add new edges: from current node to new node, and from new node to next node
       const edgeBase = {
         type: "smoothstep",
         animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: SUB_NODE_COLOR },
-        style: { strokeWidth: 2, stroke: SUB_NODE_COLOR },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--accent))' },
+        style: { strokeWidth: 2, stroke: 'hsl(var(--accent))' },
       };
-      if (existing) updated.push({ ...edgeBase, id: `e-${newId}-${existing.target}`, source: newId, target: existing.target });
-      updated.push({ ...edgeBase, id: `e-${id}-${newId}`, source: id, target: newId });
-      return updated;
+      const newEdges: Edge[] = [{ ...edgeBase, id: `e-${id}-${newId}`, source: id, target: newId }];
+      if (nextNode) newEdges.push({ ...edgeBase, id: `e-${newId}-${nextNode.id}`, source: newId, target: nextNode.id });
+  
+      return [...filteredEdges, ...newEdges];
     });
   
+ console.log("New Node added:", newNode); // Log the new node object
     toast({ title: "New step added!" });
     setTimeout(() => reactFlowInstance?.fitView({ nodes: [{ id: newId }], duration: 300, padding: 0.3 }), 100);
   }, [

@@ -1,14 +1,24 @@
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:4205608593.
+// Suggested code may be subject to a license. Learn more: ~LicenseLog:3832730345.
 
 "use client";
+
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"; // Adjust import path if necessary
 
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
-//import { UserAuthSection } from '@/components/UserAuthSection';
-import { Loader2, Maximize, Minimize, MapIcon, HomeIcon, SaveIcon } from 'lucide-react';
+import { UserAuthSection } from '@/components/auth/UserAuthSection';
 import { type Node } from 'reactflow';
+import { Loader2, Maximize, Minimize, MapIcon, HomeIcon, SaveIcon, HelpCircle } from 'lucide-react'; // Import the HelpCircle icon
 import { type WordNodeData } from '@/app/canvas/components/word-node';
+import { useAuthModal } from '@/stores/useAuthModal';
 
 interface ProjectHeaderProps {
   projectTitle: string;
@@ -39,6 +49,8 @@ export function ProjectHeader({
 }: ProjectHeaderProps) {
   const isNewProject = projectId === 'new' || !projectId;
   const hasContent = nodes.length > 0;
+  
+  const { openModal } = useAuthModal(); 
 
   return (
     <header className="p-4 border-b border-border shadow-sm bg-card sticky top-0 z-50">
@@ -59,19 +71,42 @@ export function ProjectHeader({
           aria-label="Project title input field"
         />
 
-        {isUserLoggedIn && hasContent && (
-          <Button 
-            onClick={onSaveRoadmap} 
-            disabled={isLoading} 
-            variant="outline" 
-            className="w-full sm:w-auto shrink-0 px-4 h-10"
-            title="Save current roadmap"
-          >
-            {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <SaveIcon className="mr-2 h-4 w-4" />}
-            Save Project
-          </Button>
-        )}
-        
+        <Button
+          onClick={() => {
+            if (isUserLoggedIn) {
+              onSaveRoadmap();
+            } else {
+             sessionStorage.setItem("tempRoadmapSave", JSON.stringify(nodes));
+             openModal("login");
+            }
+          }}
+          disabled={isLoading}
+          variant="outline"
+          className="w-full sm:w-auto shrink-0 px-4 h-10"
+          title="Save current roadmap"
+        >
+          {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <SaveIcon className="mr-2 h-4 w-4" />}
+          Save Project
+        </Button>
+       
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title="Help and Feedback" className="shrink-0 p-2 h-10 w-10">
+                <HelpCircle className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => { /* Handle Tutorial click */ }}>
+                Tutorial
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { /* Handle FAQ click */ }}>
+                FAQ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { /* Handle Feedback click */ }}>
+                Feedback
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         <div className="flex items-center gap-1 mt-2 sm:mt-0 sm:ml-auto w-full sm:w-auto justify-end">
           <Button
             variant="outline"
@@ -82,6 +117,7 @@ export function ProjectHeader({
             aria-label="Expand all node descriptions"
             className="h-10 w-10"
           >
+          
             <Maximize className="h-4 w-4" />
           </Button>
           <Button
@@ -106,8 +142,7 @@ export function ProjectHeader({
             <MapIcon className="h-4 w-4" />
           </Button>
           <ThemeToggle />
-          {/*<UserAuthSection />*/}
-          
+          <UserAuthSection />
         </div>
       </div>
     </header>

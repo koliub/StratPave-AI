@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -23,39 +22,48 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoginForm } from './LoginForm';
 import { SignUpForm } from './SignUpForm';
-import { Loader2, LogOut, UserCircle, Settings, LayoutDashboard } from 'lucide-react';
+import { Loader2, LogOut, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthModal } from '@/stores/useAuthModal'; // 👈 NEW
 
 export function UserAuthSection() {
   const { user, loading, signOut } = useAuth();
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("login");
   const { toast } = useToast();
+
+  const { isOpen, activeTab, openModal, closeModal } = useAuthModal(); // 👈 NEW
 
   const handleSignOut = async () => {
     try {
       await signOut();
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
     } catch (error) {
-      toast({ title: "Logout Failed", description: "Could not log out. Please try again.", variant: "destructive" });
+      toast({
+        title: "Logout Failed",
+        description: "Could not log out. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   if (loading) {
-    return <Button variant="ghost" size="icon" disabled><Loader2 className="h-5 w-5 animate-spin" /></Button>;
+    return (
+      <Button variant="ghost" size="icon" disabled>
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </Button>
+    );
   }
 
   if (!user) {
     return (
       <>
-        <Button onClick={() => { setActiveTab("login"); setIsAuthModalOpen(true); }} variant="outline">
+        <Button onClick={() => openModal("login")} variant="outline">
           Login
         </Button>
-        <Button onClick={() => { setActiveTab("signup"); setIsAuthModalOpen(true); }} className="ml-2">
+        <Button onClick={() => openModal("signup")} className="ml-2">
           Sign Up
         </Button>
-        <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
+        <Dialog open={isOpen} onOpenChange={closeModal}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle className="text-center text-2xl font-semibold">
@@ -67,24 +75,21 @@ export function UserAuthSection() {
                   : "Sign up to start creating and saving your roadmaps."}
               </DialogDescription>
             </DialogHeader>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={(val) => openModal(val as 'login' | 'signup')} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
               <TabsContent value="login" className="pt-4">
-                <LoginForm 
-                  onSwitchToSignUp={() => setActiveTab("signup")}
-                  onLoginSuccess={() => setIsAuthModalOpen(false)}
+                <LoginForm
+                  onSwitchToSignUp={() => openModal("signup")}
+                  onLoginSuccess={closeModal}
                 />
               </TabsContent>
               <TabsContent value="signup" className="pt-4">
-                <SignUpForm 
-                  onSwitchToLogin={() => setActiveTab("login")}
-                  onSignUpSuccess={() => {
-                    setIsAuthModalOpen(false);
-                    // Potentially show another toast or redirect, handled by SignUpForm for now
-                  }}
+                <SignUpForm
+                  onSwitchToLogin={() => openModal("login")}
+                  onSignUpSuccess={closeModal}
                 />
               </TabsContent>
             </Tabs>
@@ -112,9 +117,8 @@ export function UserAuthSection() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{userDisplayName}</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
-            </p>
+            <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+            <p className="text-xs leading-none text-muted-foreground">UserID: {user.uid}</p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -124,11 +128,6 @@ export function UserAuthSection() {
             Dashboard
           </Link>
         </DropdownMenuItem>
-        {/* Add more items like Profile, Settings here if needed */}
-        {/* <DropdownMenuItem disabled>
-          <Settings className="mr-2 h-4 w-4" />
-          Settings
-        </DropdownMenuItem> */}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut className="mr-2 h-4 w-4" />

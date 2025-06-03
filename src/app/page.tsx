@@ -141,23 +141,23 @@ export default function LandingPage() {
         </section>
 
         {/* Tech Stack Section */}
-        <section id="tech-stack" className="w-full py-16 md:py-24 lg:py-32 bg-muted/30 dark:bg-muted/20">
+        <section id="tech-stack" className="w-full py-16 md:py-24 lg:py-32 bg-background/70 dark:bg-background/50">
           <div className="container px-4 md:px-6 mx-auto max-w-7xl">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12 lg:mb-16">
-              <div className="inline-block rounded-lg bg-background px-3 py-1 text-sm text-primary font-medium border border-primary/30">
-                Powered By
+              <div className="inline-block rounded-lg bg-muted px-3 py-1 text-sm text-primary font-medium">
+                Who Can Use StratPave?
               </div>
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl text-foreground">
-                Modern Technology Stack
+                Diverse Use Cases, Broad Value
               </h2>
               <p className="max-w-[900px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-                Built with cutting-edge tools for a robust, scalable, and performant experience.
+                StratPave empowers individuals and teams across various domains to visualize, plan, and execute their projects with clarity and efficiency.
               </p>
             </div>
             <div className="mx-auto grid max-w-4xl grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 text-center">
               {[
-                "Next.js", "TypeScript", "Tailwind CSS", "ShadCN UI", "React Flow",
-                "Genkit", "Google AI", "Firebase Auth", "Firestore", "Lucide Icons", "Zod"
+                "Software Developers", "Project Managers", "Students & Researchers", "Entrepreneurs", "Consultants",
+                "Marketers", "Event Planners", "Educators", "Product Teams", "Designers", "Writers"
               ].map((tech) => (
                 <div key={tech} className="flex flex-col items-center justify-center p-4 bg-card rounded-lg shadow-md hover:shadow-blue-400/20 dark:hover:shadow-blue-500/30 transition-all duration-300 hover:scale-105 border border-border/50">
                   <Code className="h-7 w-7 mb-2 text-muted-foreground" strokeWidth={1.5}/>

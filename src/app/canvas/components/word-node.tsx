@@ -177,7 +177,7 @@ export function WordNode({ data, selected, id }: NodeProps<WordNodeData>) {
       aria-expanded={hasDescription ? isEffectivelyExpanded : undefined}
     >
       {selected && !data.isLoading && !data.isLoadingSubRoadmap && (data.onDeleteNode || data.onAddNodeAfter || data.onGenerateSubRoadmap) && (
-        <div className="absolute -top-3 right-2 z-10 flex flex-col space-y-1">
+        <div className="absolute -top-3 left-full ml-2 z-10 flex flex-col space-y-1">
            {data.onDeleteNode && (
             <Button
               variant="ghost"

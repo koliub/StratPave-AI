@@ -104,8 +104,6 @@ export const toFirestoreNodeData = (nodeData: WordNodeData): ProjectNodeDataForF
     onManualToggleExpansion,
     onUpdateNodeColor,
     onGenerateSubRoadmap,
-    subRoadmapNodes,
-    subRoadmapEdges,
     ...restOfData
   } = nodeData;
 
@@ -273,66 +271,31 @@ export const deleteProjectFromDb = async (userId: string, projectId: string): Pr
 };
 
 // --- Collaboration functions ---
-export const shareProjectWithUser = async (ownerId: string, projectId: string, targetUserEmail: string): Promise<void> => {
-  if (!ownerId || !projectId || !targetUserEmail) {
-    throw new Error("Owner ID, Project ID, and Target User Email are required to share project.");
-  }
-
+export const shareProjectWithUser = async (
+  ownerId: string,
+  projectId: string,
+  targetUserId: string
+): Promise<void> => {
   const projectDocRef = doc(db, `projects/${projectId}`);
-
-  // Verify the owner is the one sharing (Security rules will also enforce this)
   const projectSnap = await getDoc(projectDocRef);
-  if (!projectSnap.exists() || projectSnap.data().ownerId !== ownerId) {
-     throw new Error("Only the project owner can share it.");
-  }
 
+  if (!projectSnap.exists()) throw new Error("Project does not exist.");
+  if (projectSnap.data().ownerId !== ownerId) throw new Error("Only the owner can share the project.");
+  if (ownerId === targetUserId) throw new Error("Cannot share with yourself.");
 
-  // 1. Find targetUser UID by email
-  // This is crucial for security. You MUST find the user's UID based on the email.
-  // Querying a 'users' collection where email is indexed is a standard way.
-  // In a real application, you would likely have a Cloud Function handle this
-  // server-side to prevent clients from querying arbitrary user emails directly.
-  const usersRef = collection(db, 'users'); // Assuming you have a 'users' collection
-  const q = query(usersRef, where("email", "==", targetUserEmail)); // Assuming 'email' field exists on user documents and is indexed
-  const querySnapshot = await getDocs(q);
-
-  if (querySnapshot.empty) {
-    // User not found with that email
-    throw new Error(`No user found with email: ${targetUserEmail}`);
-  }
-
-  // Get the UID of the target user (assuming email is unique and you get one result)
-  const targetUserId = querySnapshot.docs[0].id;
-
-  // Prevent sharing with self (optional, but good practice)
-  if (targetUserId === ownerId) {
-      throw new Error("Cannot share a project with yourself.");
-  }
-
-
-  // 2. Add the target user's UID to the 'sharedWithUserIds' array in the project document
-  // Using arrayUnion prevents race conditions if multiple people try to add collaborators simultaneously.
-  // Security rules will ensure only the owner can perform this update.
   await updateDoc(projectDocRef, {
     sharedWithUserIds: arrayUnion(targetUserId),
-    updatedAt: serverTimestamp() // Update timestamp on share
+    updatedAt: serverTimestamp(),
   });
 
-  // 3. Optional but Recommended: Add the projectId to the target user's document
-  // This helps in efficiently fetching all projects a user has access to.
-  // This write is separate and should be handled carefully if the main write fails.
-  // A batched write could be used if both updates must succeed or fail together.
-    try {
-        const targetUserDocRef = doc(db, `users/${targetUserId}`);
-         await updateDoc(targetUserDocRef, {
-            accessibleProjectIds: arrayUnion(projectId)
-        });
-    } catch (error) {
-         console.error("Failed to add project ID to target user's accessible list:", error);
-         // Consider handling this discrepancy - the project is shared, but the user might not see it listed immediately
-    }
-
-  console.log(`Project ${projectId} shared with user ${targetUserId} (${targetUserEmail})`);
+  try {
+    const userDocRef = doc(db, `users/${targetUserId}`);
+    await updateDoc(userDocRef, {
+      accessibleProjectIds: arrayUnion(projectId),
+    });
+  } catch (err) {
+    console.error("Failed to update target user's accessible projects:", err);
+  }
 };
 
 export const unshareProjectWithUser = async (ownerId: string, projectId: string, targetUserId: string): Promise<void> => {
@@ -387,6 +350,42 @@ export const setProjectPublicStatus = async (ownerId: string, projectId: string,
 };
 
 
+export const shareProjectByEmail = async (ownerId: string, projectId: string, targetUserEmail: string): Promise<void> => {
+  if (!ownerId || !projectId || !targetUserEmail) {
+    throw new Error("Owner ID, Project ID, and Target User Email are required to share project by email.");
+  }
+
+  // First, share the project with the user by email (which finds their UID)
+ await shareProjectWithUser(ownerId, projectId, targetUserEmail);
+
+ // Then, set the project's public status to true
+ await setProjectPublicStatus(ownerId, projectId, true);
+
+ console.log(`Project ${projectId} shared with user ${targetUserEmail} and set to public.`);
+};
+
+
+export const updateProjectTitleInDb = async (userId: string, projectId: string, newTitle: string): Promise<void> => {
+    if (!userId || !projectId || typeof newTitle !== 'string' || newTitle.trim() === '') {
+        throw new Error("User ID, Project ID, and a non-empty new title are required to update the project title.");
+    }
+
+    const projectDocRef = doc(db, `projects/${projectId}`);
+
+    // Verify the user has permission to update the project (is owner or collaborator)
+    // Security rules should also enforce this, but a client-side check gives quicker feedback.
+    const projectSnap = await getDoc(projectDocRef);
+    if (!projectSnap.exists()) {
+        throw new Error("Project not found.");
+    }
+    const projectData = projectSnap.data();
+    if (projectData.ownerId !== userId && !projectData.sharedWithUserIds.includes(userId)) {
+        throw new Error("User does not have permission to update this project's title.");
+    }
+
+    await updateDoc(projectDocRef, { projectTitle: newTitle, updatedAt: serverTimestamp() });
+    console.log(`Project ${projectId} title updated to: "${newTitle}"`);
+};
 export { app, auth, db };
 
     

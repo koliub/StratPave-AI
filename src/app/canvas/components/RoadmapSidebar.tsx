@@ -1,5 +1,8 @@
 "use client";
 
+import Image from 'next/image';
+import Link from 'next/link';
+
 import React from 'react';
 import {
   Sidebar,
@@ -31,8 +34,43 @@ export function RoadmapSidebar({
     <Sidebar collapsible="icon" side="left">
       {/* Add SidebarTrigger as a pull tab */}
       <SidebarTrigger className="absolute top-1/2 -translate-y-1/2 right-0 z-20 p-1 h-8 w-8 rounded-l-full rounded-r-none data-[state=collapsed]:rotate-180 data-[state=collapsed]:right-0" />
+      <SidebarHeader className="p-2 space-y-4 group-data-[collapsible=icon]:py-2"> {/* Added space-y-4 for spacing */}
+        {/* Stratapve Logo - Full logo when expanded, symbol only when collapsed */}
+        <div className="flex items-center"> {/* Added padding and centering */}
+          <Link href="/">
+            {/* Full logo for expanded state */}
+            <Image
+              src="/logos/SymbolAndText_Logo_TransparentBG.png"
+              alt="Stratapve Logo"
+              width={120}
+              height={30}
+              className="dark:hidden group-data-[collapsible=icon]:hidden"
+            />
+            <Image
+              src="/logos/WhiteSymbolAndText_Logo_TransparentBG.png"
+              alt="Stratapve Logo"
+              width={120}
+              height={30}
+              className="hidden dark:block group-data-[collapsible=icon]:hidden"
+            />
+            {/* Symbol only for collapsed state */}
+            <Image
+              src="/logos/Symbol_Logo_TransparentBG.png"
+              alt="Stratapve Logo"
+              width={50}
+              height={50}
+              className="dark:hidden hidden group-data-[collapsible=icon]:block"
+            />
+            <Image
+            src="/logos/WhiteSymbol_Logo_TransparentBG.png"
+            alt="Stratapve Logo"
+            width={50}
+            height={50}
+            className="hidden dark:block group-data-[collapsible=icon]:block"
+          />
+        </Link>
 
-      <SidebarHeader className="p-2">
+        </div>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold pl-2 group-data-[collapsible=icon]:hidden">Roadmap Steps</h2>
           <ListTree className="h-5 w-5 group-data-[collapsible=icon]:mx-auto" />
@@ -51,7 +89,7 @@ export function RoadmapSidebar({
         )}
         <ScrollArea className="h-full">
           <ul className="p-2 space-y-1 group-data-[collapsible=icon]:space-y-2">
-            {nodes.filter(n => !n.data.isLoading).map((node) => (
+            {nodes.filter(n => !n.data.isLoading).map((node, index) => (
               <li key={node.id}>
                 <Button
                   variant={selectedNodeIdFromSidebar === node.id ? "secondary" : "ghost"}
@@ -63,10 +101,10 @@ export function RoadmapSidebar({
                   title={node.data.title}
                 >
                   <span className="group-data-[collapsible=icon]:hidden truncate">
-                    {node.data.title}
+                    {`${index + 1}. ${node.data.title}`}
                   </span>
                   <span className="hidden group-data-[collapsible=icon]:inline">
-                    {node.data.title ? node.data.title.substring(0,1).toUpperCase() : 'N/A'}
+                    {`${index + 1}`}
                   </span>
                 </Button>
               </li>
