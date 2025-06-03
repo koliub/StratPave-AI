@@ -37,38 +37,46 @@ export function RoadmapSidebar({
       <SidebarHeader className="p-2 space-y-4 group-data-[collapsible=icon]:py-2"> {/* Added space-y-4 for spacing */}
         {/* Stratapve Logo - Full logo when expanded, symbol only when collapsed */}
         <div className="flex items-center"> {/* Added padding and centering */}
-          <Link href="/">
-            {/* Full logo for expanded state */}
-            <Image
-              src="/logos/SymbolAndText_Logo_TransparentBG.png"
-              alt="Stratapve Logo"
-              width={120}
-              height={30}
-              className="dark:hidden group-data-[collapsible=icon]:hidden"
-            />
-            <Image
-              src="/logos/WhiteSymbolAndText_Logo_TransparentBG.png"
-              alt="Stratapve Logo"
-              width={120}
-              height={30}
-              className="hidden dark:block group-data-[collapsible=icon]:hidden"
-            />
-            {/* Symbol only for collapsed state */}
-            <Image
-              src="/logos/Symbol_Logo_TransparentBG.png"
-              alt="Stratapve Logo"
-              width={50}
-              height={50}
-              className="dark:hidden hidden group-data-[collapsible=icon]:block"
-            />
-            <Image
-            src="/logos/WhiteSymbol_Logo_TransparentBG.png"
-            alt="Stratapve Logo"
-            width={50}
-            height={50}
-            className="hidden dark:block group-data-[collapsible=icon]:block"
-          />
-        </Link>
+        <Link href="/" className="flex items-center">
+  {/* Full Logo - Light Mode */}
+  <Image
+    src="/logos/SymbolAndText_Logo_TransparentBG.png"
+    alt="Stratapve Logo"
+    width={120}
+    height={30}
+    className="block dark:hidden group-data-[collapsible=icon]:hidden"
+  />
+
+  {/* Full Logo - Dark Mode */}
+  <Image
+    src="/logos/WhiteSymbolAndText_Logo_TransparentBG.png"
+    alt="Stratapve Logo"
+    width={120}
+    height={30}
+    className="hidden group-data-[collapsible=icon]:hidden dark:block"
+  />
+
+  {/* Symbol Only - Light Mode */}
+  <Image
+    src="/logos/Symbol_Logo_TransparentBG.png"
+    alt="Stratapve Logo"
+    width={50}
+    height={50}
+    className="hidden group-data-[collapsible=icon]:block dark:group-data-[collapsible=icon]:hidden"
+  />
+
+  {/* Symbol Only - Dark Mode */}
+  <Image
+    src="/logos/WhiteSymbol_Logo_TransparentBG.png"
+    alt="Stratapve Logo"
+    width={50}
+    height={50}
+    className="hidden dark:group-data-[collapsible=icon]:block"
+  />
+</Link>
+
+
+
 
         </div>
         <div className="flex items-center justify-between">
