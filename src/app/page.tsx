@@ -2,6 +2,7 @@
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import Head from 'next/head';
 import { ArrowRight, Brain, Zap, Workflow, Layers, Code, ShieldCheck, Users, Eye, Edit } from 'lucide-react'; 
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
@@ -13,6 +14,25 @@ export default function LandingPage() {
   const logoSrc = resolvedTheme === 'dark' ? '/logos/WhiteSymbolAndText_Logo_TransparentBG.png' : '/logos/SymbolAndText_Logo_TransparentBG.png';
 
   return (
+    <>
+    <Head>
+        <title>StratPave - AI-Powered Project Roadmapping</title>
+        <meta name="description" content="Turn your complex ideas into clear, actionable plans. StratPave uses AI to generate detailed roadmaps and visualizes them as interactive, editable flowcharts." />
+        
+        {/* Open Graph tags */}
+        <meta property="og:title" content="StratPave - AI-Powered Project Roadmapping" />
+        <meta property="og:description" content="Turn your complex ideas into clear, actionable plans. StratPave uses AI to generate detailed roadmaps and visualizes them as interactive, editable flowcharts." />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="/logos/SymbolAndText_Logo_TransparentBG.png" />
+        <meta property="og:url" content="YOUR_APP_URL_HERE" /> {/* Replace with your app's URL */}
+
+        {/* Twitter Card tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="StratPave - AI-Powered Project Roadmapping" />
+        <meta name="twitter:description" content="Turn your complex ideas into clear, actionable plans. StratPave uses AI to generate detailed roadmaps and visualizes them as interactive, editable flowcharts." />
+        <meta name="twitter:image" content="/logos/SymbolAndText_Logo_TransparentBG.png" />
+    </Head>
+
     <div className="flex flex-col min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-50">
       {/* Navigation */}
       <header className="sticky top-0 z-50 w-full border-b border-border/30 dark:border-border/50 bg-background/80 dark:bg-background/70 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
@@ -190,5 +210,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

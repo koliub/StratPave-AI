@@ -412,28 +412,6 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
-      {/* Footer Section */}
-      <footer className="py-6 md:px-8 border-t bg-background/80">
-        <div className="container flex flex-col items-center justify-between gap-2 md:h-16 md:flex-row">
-          {/* Application logo and copyright information */}
-          <div className="flex items-center space-x-2">
-            <Image
-              src="/logos/Symbol_Logo_TransparentBG.png" // Make sure this exists
-              alt="StratPave Icon"
-              width={24}
-              height={24}
-              className="h-6 w-auto"
-            />
-            <p className="text-balance text-center text-xs leading-loose text-muted-foreground md:text-left">
-              StratPave &copy; {new Date().getFullYear()}. Plan Smarter. Build Faster.
-            </p>
-          </div>
-          {/* All rights reserved text */}
-          <p className="text-center text-xs text-muted-foreground/70">
-            All rights reserved.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
