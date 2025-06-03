@@ -214,9 +214,9 @@ export default function Dashboard() {
       {/* Main content wrapper */}
       <main>
         {/* Layout container with fixed sidebar */}
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex flex-col lg:flex-row min-h-screen">
           {/* Sidebar Section - Static */}
-          <div className="fixed inset-y-0 left-0 w-80 bg-gray-100 dark:bg-gray-800 p-4 overflow-y-auto text-black dark:text-white flex flex-col items-center">
+          <div className="w-full lg:w-80 bg-gray-100 dark:bg-gray-800 p-4 overflow-y-auto text-black dark:text-white flex flex-col items-center">
             {/* Logo linking to the home page */}
             <Link href="/">
               <div className="mb-8">
@@ -352,7 +352,8 @@ export default function Dashboard() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col ml-80 transition-all duration-300">
+          <div className="flex-1 flex flex-col">
+
             {/* Header Section */}
             <div className="flex justify-end p-4">
               {/* Theme toggle component */}
