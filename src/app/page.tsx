@@ -144,7 +144,7 @@ export default function LandingPage() {
                 { icon: Brain, title: "AI Roadmap Generation", description: "Instantly generate comprehensive roadmaps from simple text prompts using advanced AI.", color: "text-pink-600 dark:text-pink-400" },
                 { icon: Workflow, title: "Interactive Flowcharts", description: "Visualize and edit your projects with an intuitive React Flow canvas.", color: "text-blue-600 dark:text-blue-400" },
                 { icon: Layers, title: "Detailed Sub-Roadmaps", description: "Break down complex tasks into manageable sub-steps for greater clarity and control.", color: "text-purple-600 dark:text-purple-400" },
-                { icon: Users, title: "User Accounts & Storage", description: "Securely save and manage your personal roadmaps with Firebase Authentication and Firestore.", color: "text-green-600 dark:text-green-400" },
+                { icon: Users, title: "User Accounts & Storage", description: "Securely save and manage your personal roadmaps with your own account.", color: "text-green-600 dark:text-green-400" },
                 { icon: Edit, title: "Intuitive Editing", description: "Easily edit titles, descriptions, mark steps as complete, and add new steps on the fly.", color: "text-orange-600 dark:text-orange-400" },
                 { icon: Eye, title: "Customizable View", description: "Toggle minimap, expand/collapse descriptions, and manage your workspace effectively.", color: "text-teal-600 dark:text-teal-400" },
               ].map(feature => (

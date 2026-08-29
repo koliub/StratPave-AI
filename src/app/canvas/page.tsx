@@ -20,7 +20,8 @@ import {
   SidebarInset,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
-import { getProjectFromDb, saveProjectToDb, toFirestoreNodes } from '@/lib/firebase'; // Import Firestore functions and utility
+import { getProjectFromDb, saveProjectToDb } from '@/lib/db/projects'; // Import DB functions
+import { toStorableNodes } from '@/lib/project-utils';
 
 import { RoadmapSidebar } from '@/app/canvas/components/RoadmapSidebar';
 import { RoadmapCanvas } from '@/app/canvas/components/RoadmapCanvas';
@@ -415,7 +416,7 @@ useLayoutEffect(() => {
   };
 
   {/* Project Saving */}
-  // Function to save the project to Firestore
+  // Function to save the project to the database
   const handleSaveRoadmap = useCallback(async () => {
     if (!user?.uid) {
       toast({
@@ -429,14 +430,14 @@ useLayoutEffect(() => {
     setIsLoading(true);
     try {
       // Use the utility function to convert nodes to the Firestore format
-      const nodesForFirestore = toFirestoreNodes(nodes);
+      const storableNodes = toStorableNodes(nodes);
 
       // Calculate total and completed nodes
       const totalNodes = nodes.length;
       const completedNodes = nodes.filter(node => node.data.isDone).length;
 
       const projectToSave = {
-        nodes: nodesForFirestore,
+        nodes: storableNodes,
         edges: edges,
         prompt: promptText,
         projectTitle: projectTitle, // Save the separate project title

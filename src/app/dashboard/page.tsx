@@ -25,8 +25,9 @@ import { Loader2, PlusCircle, Trash2, FileText, Pencil, Repeat2, EllipsisVertica
 import { useTheme } from '@/components/theme/theme-provider';
 // Importing the correct auth hook
 import { useAuth } from '@/context/AuthContext';
-// Importing Firebase interaction functions and types.
-import { getUserProjectsFromDb, deleteProjectFromDb, shareProjectWithUser, updateProjectTitleInDb, ProjectPreview } from '@/lib/firebase'; // Import firebase functions and types
+// Importing DB interaction functions and types.
+import { getUserProjectsFromDb, deleteProjectFromDb, shareProjectWithUser, updateProjectTitleInDb } from '@/lib/db/projects';
+import type { ProjectPreview } from '@/lib/project-utils';
 
 // --- Dashboard Component Definition ---
 export default function Dashboard() {
@@ -120,7 +121,7 @@ export default function Dashboard() {
     }
     try {
       console.log('Deleting project:', projectId);
-      // Call the firebase delete function.
+      // Call the database delete function.
       await deleteProjectFromDb(user.uid, projectId); // Corrected: use user.uid
       // Remove the deleted project from the local state to update the UI.
       setProjects(projects.filter(project => project.id !== projectId));
@@ -197,15 +198,11 @@ export default function Dashboard() {
 
   // --- UI Utility Functions Section ---
   // Helper function to format timestamp.
-  const formatTimestamp = (timestamp: any) => {
+  const formatTimestamp = (timestamp: Date | string | null | undefined) => {
     if (!timestamp) return 'N/A';
-    // Firebase Timestamp has toDate() method.
-    if (timestamp.toDate) {
-      const date = timestamp.toDate();
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    // Handle other potential timestamp formats if necessary.
-    return String(timestamp);
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (isNaN(date.getTime())) return String(timestamp);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   // --- Component Render Section ---

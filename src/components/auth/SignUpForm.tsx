@@ -33,7 +33,7 @@ export function SignUpForm({ onSwitchToLogin, onSignUpSuccess }: SignUpFormProps
       // The AuthContext listener will update the user state globally
       // You might want to show a success toast here or in the component calling this form
     } catch (err: any) {
-       // Handle specific Firebase auth errors (e.g., email-already-in-use, weak-password)
+       // Handle specific auth errors (e.g., email already in use, weak password)
       console.error("Sign Up error:", err.message);
       setError(err.message || "An unexpected error occurred during sign up."); // Display error message
     } finally {

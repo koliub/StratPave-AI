@@ -22,7 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoginForm } from './LoginForm';
 import { SignUpForm } from './SignUpForm';
-import { Loader2, LogOut, LayoutDashboard } from 'lucide-react';
+import { Loader2, LogOut, LayoutDashboard, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthModal } from '@/stores/useAuthModal'; // 👈 NEW
@@ -126,6 +126,12 @@ export function UserAuthSection() {
           <Link href="/dashboard">
             <LayoutDashboard className="mr-2 h-4 w-4" />
             Dashboard
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/settings">
+            <Settings className="mr-2 h-4 w-4" />
+            AI Settings
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
